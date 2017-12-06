@@ -5,18 +5,30 @@ except:
 	exit()
 
 import re
+import glob
+import sys
+import numpy as np
 
 class Temperature_Controller(object):
 	"""Interface with serial com port to control temperature"""
 	def __init__( self ):
-		try:
-			self.serial_connection = serial.Serial('COM3', 115200, timeout=0)
-		except:
+		success = False
+		for port in GetAvailablePorts():
+			try:
+				self.serial_connection = serial.Serial(port, 115200, timeout=0)
+				success = True
+				break
+			except:
+				pass
+
+		if( not success ):
 			print( "Issue finding serial device, please make sure it is connected")
 			exit()
+
 		self.current_temperature = None
 		self.setpoint_temperature = None
 		self.partial_serial_message = ""
+		self.past_temperatures = []
 
 	def Update( self ):
 		try:
@@ -34,17 +46,60 @@ class Temperature_Controller(object):
 		#except serial.serialutil.SerialException:
 		#	pass
 
-	def SetTemp( self, new_temperature ):
-		self.serial_connection.write( ("Set Temp " + str(new_temperature)).encode() )
+	def Set_Temperature_In_K( self, temperature_in_k ):
+		temperature_in_c = temperature_in_k - 273.15
+		self.setpoint_temperature = temperature_in_k
+		self.serial_connection.write( ("Set Temp " + str(temperature_in_c)).encode() )
 
-	def GetTemp( self ):
+	def Get_Temperature_In_K( self ):
 		return self.current_temperature
 
 	def ParseMessage( self, message ):
 		pattern = re.compile( r'Thermocouple Temp: (-?\d+\.\d+([eE][-+]?\d+?)?)' ) # Grab any properly formatted floating point number
 		m = pattern.match( message )
 		if( m ):
-			self.current_temperature = float( m.group( 1 ) )
+			self.current_temperature = float( m.group( 1 ) ) + 273.15
+			self.past_temperatures.append( self.current_temperature )
+			if( len(self.past_temperatures) > 10 ):
+				self.past_temperatures = self.past_temperatures[-10:]
 
+	def Temperature_Is_Stable( self ):
+		if( len(self.past_temperatures) < 10 ):
+			return False
+		error = np.array( self.past_temperatures ) - self.setpoint_temperature
+		deviation = np.std( error )
+		average_error = np.mean( error )
+		if( abs(average_error) < 1 and deviation < 0.5 ):
+			return True
+		else:
+			return False
 
+# Function from: https://stackoverflow.com/questions/12090503/listing-available-com-ports-with-python/14224477#14224477
+def GetAvailablePorts():
+	""" Lists serial port names
+
+		:raises EnvironmentError:
+			On unsupported or unknown platforms
+		:returns:
+			A list of the serial ports available on the system
+	"""
+	if sys.platform.startswith('win'):
+		ports = ['COM%s' % (i + 1) for i in range(256)]
+	elif sys.platform.startswith('linux') or sys.platform.startswith('cygwin'):
+		# this excludes your current terminal "/dev/tty"
+		ports = glob.glob('/dev/tty[A-Za-z]*')
+	elif sys.platform.startswith('darwin'):
+		ports = glob.glob('/dev/tty.*')
+	else:
+		raise EnvironmentError('Unsupported platform')
+
+	result = []
+	for port in ports:
+		try:
+			s = serial.Serial(port)
+			s.close()
+			result.append(port)
+		except (OSError, serial.SerialException):
+			pass
+	return result
 

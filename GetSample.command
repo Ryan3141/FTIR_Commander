@@ -6,7 +6,7 @@ Enter
 WaitFor OMNIC - [WindowName]
 CtrlText s
 WaitFor Collect Sample
-Text Background data
+Text SampleDataName
 Tab
 Enter
 WaitFor Confirmation
@@ -16,8 +16,8 @@ AltText f
 Down
 Down
 Enter
-WaitFor Save As - Background data
-Text Test.csv
+WaitFor Save As - SampleDataName
+Text $MeasurementName
 Tab 2
 Enter
 CtrlF4
