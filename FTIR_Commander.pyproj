@@ -4,7 +4,7 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>97699e0d-d691-4ca7-a9fd-ef945cfdc928</ProjectGuid>
     <ProjectHome>.</ProjectHome>
-    <StartupFile>FTIR_Commander.py</StartupFile>
+    <StartupFile>FTIR_GUI.py</StartupFile>
     <SearchPath>
     </SearchPath>
     <WorkingDirectory>.</WorkingDirectory>
@@ -22,6 +22,9 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="FTIR_Commander.py" />
+    <Compile Include="FTIR_GUI.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="Omnic_Controller.py">
       <SubType>Code</SubType>
     </Compile>

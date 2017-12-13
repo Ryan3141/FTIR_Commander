@@ -15,7 +15,7 @@ Down
 Down
 Enter
 WaitFor Save As - BackgroundDataName
-Text $MeasurementName.csv
+Text MeasurementName.csv
 Tab 2
 Enter
 CtrlF4

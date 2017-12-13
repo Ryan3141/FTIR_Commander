@@ -22,13 +22,13 @@ class Temperature_Controller(object):
 				pass
 
 		if( not success ):
-			print( "Issue finding serial device, please make sure it is connected")
-			exit()
+			raise Exception( "Issue finding serial device, please make sure it is connected" )
 
 		self.current_temperature = None
 		self.setpoint_temperature = None
 		self.partial_serial_message = ""
 		self.past_temperatures = []
+		self.stable_temperature_sample_count = 10
 
 	def Update( self ):
 		try:
@@ -49,7 +49,13 @@ class Temperature_Controller(object):
 	def Set_Temperature_In_K( self, temperature_in_k ):
 		temperature_in_c = temperature_in_k - 273.15
 		self.setpoint_temperature = temperature_in_k
-		self.serial_connection.write( ("Set Temp " + str(temperature_in_c)).encode() )
+		self.serial_connection.write( ("Set Temp " + str(temperature_in_c) + ";\n").encode() )
+
+	def Turn_On( self ):
+		self.serial_connection.write( ("turn on;\n").encode() )
+
+	def Turn_Off( self ):
+		self.serial_connection.write( ("turn off;\n").encode() )
 
 	def Get_Temperature_In_K( self ):
 		return self.current_temperature
@@ -60,11 +66,11 @@ class Temperature_Controller(object):
 		if( m ):
 			self.current_temperature = float( m.group( 1 ) ) + 273.15
 			self.past_temperatures.append( self.current_temperature )
-			if( len(self.past_temperatures) > 10 ):
-				self.past_temperatures = self.past_temperatures[-10:]
+			if( len(self.past_temperatures) > self.stable_temperature_sample_count ):
+				self.past_temperatures = self.past_temperatures[-self.stable_temperature_sample_count:]
 
 	def Temperature_Is_Stable( self ):
-		if( len(self.past_temperatures) < 10 ):
+		if( len(self.past_temperatures) < self.stable_temperature_sample_count ):
 			return False
 		error = np.array( self.past_temperatures ) - self.setpoint_temperature
 		deviation = np.std( error )
