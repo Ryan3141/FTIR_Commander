@@ -7,7 +7,6 @@ from datetime import datetime
 
 from Temperature_Controller import Temperature_Controller
 from Omnic_Controller import Omnic_Controller
-
 class ftir_application:
 	def __init__( self, directory_for_commands, directory_for_results ):
 		self.temp_controller = Temperature_Controller()

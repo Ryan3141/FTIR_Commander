@@ -8,11 +8,20 @@ import re
 import glob
 import sys
 import numpy as np
+from time import sleep
 
-class Temperature_Controller(object):
+from PyQt5 import QtCore
+
+from Device_Communicator import Device_Communicator
+
+class Temperature_Controller( QtCore.QObject ):
 	"""Interface with serial com port to control temperature"""
-	def __init__( self ):
+	Temperature_Changed = QtCore.pyqtSignal(float)
+
+	def __init__( self, parent=None ):
+		super().__init__( parent )
 		success = False
+		self.serial_connection = None
 		for port in GetAvailablePorts():
 			try:
 				self.serial_connection = serial.Serial(port, 115200, timeout=0)
@@ -21,53 +30,83 @@ class Temperature_Controller(object):
 			except:
 				pass
 
+		try:
+			self.device_communicator = Device_Communicator( parent, identifier_string="Temperature Controller", listener_address=None, port=6543 )
+			self.device_communicator.Poll_LocalIPs_For_Devices( '192.168.1-2.2-254' )
+			success = True
+			self.device_communicator.Reply_Recieved.connect( lambda message, device : self.ParseMessage( message ) )
+		except:
+			self.device_communicator = None
+
 		if( not success ):
-			raise Exception( "Issue finding serial device, please make sure it is connected" )
+			raise Exception( "Issue finding any device, please make sure it is connected" )
 
 		self.current_temperature = None
 		self.setpoint_temperature = None
 		self.partial_serial_message = ""
 		self.past_temperatures = []
-		self.stable_temperature_sample_count = 10
+		self.stable_temperature_sample_count = 20
 
 	def Update( self ):
-		try:
-			temp = self.serial_connection.readline()
-			self.partial_serial_message += temp.decode("utf-8", "ignore")
-			split_into_messages = self.partial_serial_message.split( '\n' )
-			self.partial_serial_message = split_into_messages[ -1 ]
-			for message in split_into_messages[:-1]:
-				self.ParseMessage( message )
+		if( self.device_communicator.No_Devices_Connected() ):
+			self.device_communicator.Poll_LocalIPs_For_Devices( '192.168.1-2.2-254' )
+		if self.serial_connection is not None:
+			try:
+				temp = self.serial_connection.readline()
+				self.partial_serial_message += temp.decode("utf-8", "ignore")
+				split_into_messages = self.partial_serial_message.split( '\n' )
+				self.partial_serial_message = split_into_messages[ -1 ]
+				for message in split_into_messages[:-1]:
+					self.ParseMessage( message )
 
-#		time.sleep(1)
-		except serial.SerialTimeoutException:
-			pass
-#   		print('Data could not be read')
-		#except serial.serialutil.SerialException:
-		#	pass
+	#		time.sleep(1)
+			except serial.SerialTimeoutException:
+				pass
+#   			print('Data could not be read')
+			#except serial.serialutil.SerialException:
+			#	pass
 
 	def Set_Temperature_In_K( self, temperature_in_k ):
+		print( "Setting output temperature to " + str(temperature_in_k) )
 		temperature_in_c = temperature_in_k - 273.15
 		self.setpoint_temperature = temperature_in_k
-		self.serial_connection.write( ("Set Temp " + str(temperature_in_c) + ";\n").encode() )
+		message = ("Set Temp " + str(temperature_in_c) + ";\n")
+		if self.serial_connection is not None:
+			self.serial_connection.write( message.encode() )
+
+		self.device_communicator.Send_Command( message )
 
 	def Turn_On( self ):
-		self.serial_connection.write( ("turn on;\n").encode() )
+		print( "Turning PID On" )
+		message = ("turn on;\n")
+		if self.serial_connection is not None:
+			self.serial_connection.write( message.encode() )
+
+		self.device_communicator.Send_Command( message )
 
 	def Turn_Off( self ):
-		self.serial_connection.write( ("turn off;\n").encode() )
+		print( "Turning PID Off" )
+		message = ("turn off;\n")
+		if self.serial_connection is not None:
+			self.serial_connection.write( message.encode() )
+
+		self.device_communicator.Send_Command( message )
 
 	def Get_Temperature_In_K( self ):
 		return self.current_temperature
 
 	def ParseMessage( self, message ):
-		pattern = re.compile( r'Thermocouple Temp: (-?\d+\.\d+([eE][-+]?\d+?)?)' ) # Grab any properly formatted floating point number
+		pattern = re.compile( r'Temperature = (-?\d+(\.\d+)?([eE][-+]?\d+?)?)' ) # Grab any properly formatted floating point number
+		debug_pattern = re.compile( r"Temperature setpoint changed to " );
 		m = pattern.match( message )
 		if( m ):
 			self.current_temperature = float( m.group( 1 ) ) + 273.15
+			self.Temperature_Changed.emit( self.current_temperature )
 			self.past_temperatures.append( self.current_temperature )
 			if( len(self.past_temperatures) > self.stable_temperature_sample_count ):
 				self.past_temperatures = self.past_temperatures[-self.stable_temperature_sample_count:]
+		elif( debug_pattern.match( message ) ):
+			print( message )
 
 	def Temperature_Is_Stable( self ):
 		if( len(self.past_temperatures) < self.stable_temperature_sample_count ):

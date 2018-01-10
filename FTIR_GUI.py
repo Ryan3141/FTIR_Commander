@@ -129,3 +129,4 @@ if( __name__ == "__main__" ):
 	root.configure(background="#333333")
 	my_gui = FTIR_GUI(root)
 	root.mainloop()
+

@@ -12,6 +12,7 @@ class Omnic_Controller(object):
 
 		self.remembered_file_list = os.listdir( self.directory_for_results )
 		self.response_function = lambda file_location, file_name : None
+		self.unchecked_new_files = []
 
 	def Update( self ):
 		current_file_list = os.listdir( self.directory_for_results )
@@ -27,6 +28,7 @@ class Omnic_Controller(object):
 			file_tmp_path = temporary_folder + '/' + f
 			shutil.move( file_remote_path, file_tmp_path )
 			self.response_function( temporary_folder, f )
+			self.unchecked_new_files.append( ( temporary_folder, f ) )
 			print( "Finished measuring: " + f + '\n' )
 			results_found = True
 
