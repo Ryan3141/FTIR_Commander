@@ -34,9 +34,9 @@ class MyApp(QtWidgets.QMainWindow, Ui_MainWindow):
 	def Init_Subsystems( self ):
 		self.Connect_To_SQL()
 		self.temp_controller = Temperature_Controller( self )
-		self.omnic_controller = Omnic_Controller( directory_for_commands=r"C:\Users\Ryan\Documents\Visual Studio 2017\Projects\FTIR_Commander\FTIR_Commander\Commands",
-							   directory_for_results=r"C:\Users\Ryan\Documents\Visual Studio 2017\Projects\FTIR_Commander\FTIR_Commander\Outputs" )
-		#self.omnic_controller = Omnic_Controller( directory_for_commands=r"\\NICCOMP\ExportData\Commands", directory_for_results=r"\\NICCOMP\ExportData\Output" )
+		#self.omnic_controller = Omnic_Controller( directory_for_commands=r"C:\Users\Ryan\Documents\Visual Studio 2017\Projects\FTIR_Commander\FTIR_Commander\Commands",
+		#					   directory_for_results=r"C:\Users\Ryan\Documents\Visual Studio 2017\Projects\FTIR_Commander\FTIR_Commander\Outputs" )
+		self.omnic_controller = Omnic_Controller( directory_for_commands=r"\\NICCOMP\ExportData\Commands", directory_for_results=r"\\NICCOMP\ExportData\Output" )
 		recheck_timer = QtCore.QTimer( self )
 		recheck_timer.timeout.connect( self.temp_controller.Update )
 		recheck_timer.start( 500 )
