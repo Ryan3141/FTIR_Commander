@@ -34,9 +34,10 @@ class MyApp(QtWidgets.QMainWindow, Ui_MainWindow):
 	def Init_Subsystems( self ):
 		self.Connect_To_SQL()
 		self.temp_controller = Temperature_Controller( self )
-		#self.omnic_controller = Omnic_Controller( directory_for_commands=r"C:\Users\Ryan\Documents\Visual Studio 2017\Projects\FTIR_Commander\FTIR_Commander\Commands",
-		#					   directory_for_results=r"C:\Users\Ryan\Documents\Visual Studio 2017\Projects\FTIR_Commander\FTIR_Commander\Outputs" )
-		self.omnic_controller = Omnic_Controller( directory_for_commands=r"\\NICCOMP\ExportData\Commands", directory_for_results=r"\\NICCOMP\ExportData\Output" )
+		#self.omnic_controller = Omnic_Controller( parent=self,
+		#						directory_for_commands=r"C:\Users\Ryan\Documents\Visual Studio 2017\Projects\FTIR_Commander\FTIR_Commander\Commands",
+		#						directory_for_results=r"C:\Users\Ryan\Documents\Visual Studio 2017\Projects\FTIR_Commander\FTIR_Commander\Outputs" )
+		self.omnic_controller = Omnic_Controller( parent=self, directory_for_commands=r"\\NICCOMP\ExportData\Commands", directory_for_results=r"\\NICCOMP\ExportData\Output" )
 		recheck_timer = QtCore.QTimer( self )
 		recheck_timer.timeout.connect( self.temp_controller.Update )
 		recheck_timer.start( 500 )
@@ -108,8 +109,8 @@ class MyApp(QtWidgets.QMainWindow, Ui_MainWindow):
 		for temperature in temperatures_to_measure:
 			for bias in biases_to_measure:
 				self.omnic_controller.Set_Response_Function(
-					lambda file_location, file_name :
-					Deal_With_FTIR_Data( file_location, file_name, self.sql_conn,
+					lambda ftir_file_contents :
+					Deal_With_FTIR_Data( ftir_file_contents, self.sql_conn,
 							sample_name, temperature, bias ) )
 
 				if( temperature ): # None is ok, just means we don't know the temperature
@@ -127,6 +128,9 @@ class MyApp(QtWidgets.QMainWindow, Ui_MainWindow):
 					QtCore.QCoreApplication.processEvents()
 
 		self.Turn_Off_Temp()
+		self.omnic_controller.Set_Response_Function(
+			lambda ftir_file_contents : None )
+
 		print( "Finished Measurment\n" )
 
 
@@ -146,19 +150,14 @@ def Create_Table_If_Needed( sql_conn ):
 	cur.close()
 	return False
 
-def Deal_With_FTIR_Data( file_location, file_name, sql_conn, sample_name, temperature_in_k, bias_in_v ):
-	full_path = file_location + '/' + file_name
-	file = open( full_path, 'r' )
-	file_contents = file.read()
-	file.close()
-
+def Deal_With_FTIR_Data( ftir_file_contents, sql_conn, sample_name, temperature_in_k, bias_in_v ):
 	#output_command_file = open( './test_auto.csv', 'w' )
 	#output_command_file.write( file_contents )
 	#output_command_file.close()
 
 	wave_number = []
 	intensity = []
-	for line in file_contents.split('\n'):
+	for line in ftir_file_contents.split('\n'):
 		data_split = line.split(',')
 		if len( data_split ) < 2:
 			continue
@@ -175,8 +174,6 @@ def Deal_With_FTIR_Data( file_location, file_name, sql_conn, sample_name, temper
 	cur.execute( meta_data_sql_string, (sample_name,measurement_id,temperature_in_k,bias_in_v) )
 	cur.executemany( data_sql_string, zip([measurement_id for x in range(len(wave_number))],wave_number,intensity) )
 	sql_conn.commit()
-
-	os.remove( full_path )
 
 
 if __name__ == "__main__":

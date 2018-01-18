@@ -24,6 +24,7 @@ class Device:
 
 class Device_Communicator( QtCore.QObject ):
 	Reply_Recieved = QtCore.pyqtSignal(str, Device)
+	File_Recieved = QtCore.pyqtSignal(str, Device)
 
 	def __init__( self, parent, identifier_string, listener_address, port ):
 		super().__init__( parent )
@@ -88,6 +89,7 @@ class Device_Communicator( QtCore.QObject ):
 		new_pSocket.readyRead.connect( lambda : self.Read_From_Socket(peer_identifier) )
 
 	def Socket_Disconnected( self, peer_identifier ):
+		print( "Disconnected to: " + peer_identifier )
 		del self.active_connections[ peer_identifier ]
 
 	def Read_From_Socket( self, peer_identifier ):
@@ -96,6 +98,21 @@ class Device_Communicator( QtCore.QObject ):
 		connected_device.raw_data_stream += bytes(data).decode()
 		split_by_line = connected_device.raw_data_stream.split( '\n' )
 		connected_device.raw_data_stream = split_by_line[-1]
+
+		re = QtCore.QRegularExpression( '''^FILE (\d+)$''' );
+		for index,line in enumerate( split_by_line ):
+			match = re.match( line );
+			if not match.hasMatch():
+				continue
+			size_of_file = int(match.captured( 1 ))
+			size_of_header = len(line) + 1
+			connected_device.raw_data_stream = '\n'.join( split_by_line[index:] )
+			if( len(connected_device.raw_data_stream) >= size_of_header + size_of_file ):
+				self.File_Recieved.emit( connected_device.raw_data_stream[size_of_header:size_of_header + size_of_file], connected_device )
+				connected_device.raw_data_stream = connected_device.raw_data_stream[size_of_header + size_of_file:]
+
+			break
+
 
 		for one_line in split_by_line[:-1]:
 			self.Reply_Recieved.emit( one_line, connected_device )

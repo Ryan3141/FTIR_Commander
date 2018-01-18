@@ -2,19 +2,39 @@ import time
 import shutil
 import os
 
+from Device_Communicator import Device_Communicator
 
 class Omnic_Controller(object):
 	"""Interface with Omnic Windows NT Computer"""
 	unique_name_number = 0
-	def __init__( self, directory_for_commands, directory_for_results ):
+	def __init__( self, parent, directory_for_commands, directory_for_results ):
 		self.directory_for_commands = directory_for_commands
 		self.directory_for_results = directory_for_results
 
 		self.remembered_file_list = os.listdir( self.directory_for_results )
-		self.response_function = lambda file_location, file_name : None
-		self.unchecked_new_files = []
+		self.response_function = lambda ftir_file_contents : None
+
+		try:
+			self.device_communicator = Device_Communicator( parent, identifier_string="Omnic Controller", listener_address=None, port=6542 )
+			self.device_communicator.Poll_LocalIPs_For_Devices( '127.0.0.1' )#'192.168.1-2.2-254' )
+			success = True
+			self.device_communicator.Reply_Recieved.connect( lambda message, device : self.ParseMessage( message ) )
+			self.device_communicator.File_Recieved.connect( lambda message, device : self.ParseFile( message ) )
+		except:
+			self.device_communicator = None
+			raise Exception( "Issue setting up network listener, please make sure computer is connected to a router" )
+
+
+	def ParseMessage( self, message ):
+		pass
+	def ParseFile( self, message ):
+		self.response_function( message )
+		pass
 
 	def Update( self ):
+		if( self.device_communicator.No_Devices_Connected() ):
+			self.device_communicator.Poll_LocalIPs_For_Devices( '127.0.0.1' )
+
 		current_file_list = os.listdir( self.directory_for_results )
 		added = [f for f in current_file_list if not f in self.remembered_file_list]
 		temporary_folder = '.'
@@ -27,10 +47,14 @@ class Omnic_Controller(object):
 			file_remote_path = self.directory_for_results + '/' + f
 			file_tmp_path = temporary_folder + '/' + f
 			shutil.move( file_remote_path, file_tmp_path )
-			self.response_function( temporary_folder, f )
-			self.unchecked_new_files.append( ( temporary_folder, f ) )
+			file = open( file_tmp_path, 'r' )
+			file_contents = file.read()
+			file.close()
+
+			self.response_function( file_contents )
 			print( "Finished measuring: " + f + '\n' )
 			results_found = True
+			os.remove( file_tmp_path )
 
 		return results_found
 
