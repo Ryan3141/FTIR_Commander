@@ -77,7 +77,7 @@ class MyApp(QtWidgets.QMainWindow, Ui_MainWindow):
 	def Turn_Off_Temp( self ):
 		if( self.temp_controller ):
 			self.temp_controller.Turn_Off()
-			self.temperature_graph = None
+			self.temperature_graph.setpoint_temperature = None
 
 		#for device_id, device in device_communicator.active_connections:
 		#	self.device_communicator.Send_Command( ("Turn Off;\n").encode(), device )
