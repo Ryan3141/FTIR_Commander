@@ -16,7 +16,7 @@ class Omnic_Controller(object):
 
 		try:
 			self.device_communicator = Device_Communicator( parent, identifier_string="Omnic Controller", listener_address=None, port=6542 )
-			self.device_communicator.Poll_LocalIPs_For_Devices( '127.0.0.1' )#'192.168.1-2.2-254' )
+			self.device_communicator.Poll_LocalIPs_For_Devices( "192.168.1-2.2-254" )#'127.0.0.1' )
 			success = True
 			self.device_communicator.Reply_Recieved.connect( lambda message, device : self.ParseMessage( message ) )
 			self.device_communicator.File_Recieved.connect( lambda message, device : self.ParseFile( message ) )
@@ -33,7 +33,7 @@ class Omnic_Controller(object):
 
 	def Update( self ):
 		if( self.device_communicator.No_Devices_Connected() ):
-			self.device_communicator.Poll_LocalIPs_For_Devices( '127.0.0.1' )
+			self.device_communicator.Poll_LocalIPs_For_Devices( "192.168.1-2.2-254" )#'127.0.0.1' )
 
 		current_file_list = os.listdir( self.directory_for_results )
 		added = [f for f in current_file_list if not f in self.remembered_file_list]
@@ -58,8 +58,18 @@ class Omnic_Controller(object):
 
 		return results_found
 
+	def SendFile( self, file_path ):
+		file = open( "GetBackground.command", 'r' )
+		file_contents = file.read()
+		file.close()
+
+		self.device_communicator.Send_Command( "FILE " + str(len(file_contents)) + "\n" + file_contents )
 
 	def Measure_Background( self, measurement_name ):
+		print( "Starting measurement: " + measurement_name + '\n' )
+		self.SendFile( "GetBackground.command" )
+		return
+
 		print( "Starting measurement: " + measurement_name + '\n' )
 		file = open( "GetBackground.command", 'r' )
 		file_contents = file.read()
@@ -72,6 +82,9 @@ class Omnic_Controller(object):
 		output_command_file.close()
 
 	def Measure_Sample( self, measurement_name ):
+		SendFile( "GetSample.command" )
+		return
+
 		file = open( "GetSample.command", 'r' )
 		file_contents = file.read()
 		file.close()
