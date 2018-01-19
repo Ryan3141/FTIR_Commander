@@ -8,10 +8,14 @@ class Omnic_Controller(object):
 	"""Interface with Omnic Windows NT Computer"""
 	unique_name_number = 0
 	def __init__( self, parent, directory_for_commands, directory_for_results ):
+		self.got_file_over_tcp = False
 		self.directory_for_commands = directory_for_commands
 		self.directory_for_results = directory_for_results
 
-		self.remembered_file_list = os.listdir( self.directory_for_results )
+		try:
+			self.remembered_file_list = os.listdir( self.directory_for_results )
+		except:
+			self.remembered_file_list = []
 		self.response_function = lambda ftir_file_contents : None
 
 		try:
@@ -29,13 +33,22 @@ class Omnic_Controller(object):
 		pass
 	def ParseFile( self, message ):
 		self.response_function( message )
+		self.got_file_over_tcp = True
 		pass
 
 	def Update( self ):
 		if( self.device_communicator.No_Devices_Connected() ):
 			self.device_communicator.Poll_LocalIPs_For_Devices( "192.168.1-2.2-254" )#'127.0.0.1' )
 
-		current_file_list = os.listdir( self.directory_for_results )
+		if self.got_file_over_tcp:
+			self.got_file_over_tcp = False
+			return True
+
+		try:
+			current_file_list = os.listdir( self.directory_for_results )
+		except:
+			return False # Unable to access folders
+
 		added = [f for f in current_file_list if not f in self.remembered_file_list]
 		temporary_folder = '.'
 		if( len(added) == 0 ):
@@ -52,7 +65,7 @@ class Omnic_Controller(object):
 			file.close()
 
 			self.response_function( file_contents )
-			print( "Finished measuring: " + f + '\n' )
+			print( "Finished measuring: " + f )
 			results_found = True
 			os.remove( file_tmp_path )
 
@@ -66,11 +79,11 @@ class Omnic_Controller(object):
 		self.device_communicator.Send_Command( "FILE " + str(len(file_contents)) + "\n" + file_contents )
 
 	def Measure_Background( self, measurement_name ):
-		print( "Starting measurement: " + measurement_name + '\n' )
+		print( "Starting measurement: " + measurement_name )
 		self.SendFile( "GetBackground.command" )
 		return
 
-		print( "Starting measurement: " + measurement_name + '\n' )
+		print( "Starting measurement: " + measurement_name )
 		file = open( "GetBackground.command", 'r' )
 		file_contents = file.read()
 		file.close()

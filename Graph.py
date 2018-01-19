@@ -19,12 +19,24 @@ import numpy as np
 class Graph(QChartView):
 	def __init__(self, parent=None):
 		super().__init__(parent=parent)
+
+		self.setpoint_temperature = None
+
 		self.chart = QChart()
 		self.chart.legend().hide()
 		self.setChart( self.chart )
 		self.setRenderHint(QPainter.Antialiasing)
 		self.chart.setPlotAreaBackgroundBrush( QBrush(Qt.black) )
 		self.chart.setPlotAreaBackgroundVisible( True )
+
+		self.setpointTemperatureSeries = QLineSeries( self.chart )
+		pen = self.setpointTemperatureSeries.pen()
+		pen.setWidthF(2.)
+		pen.setColor( Qt.green )
+		self.setpointTemperatureSeries.setPen( pen )
+		#self.setpointTemperatureSeries.setUseOpenGL( True )
+		self.chart.addSeries( self.setpointTemperatureSeries )
+
 		self.temperatureSeries = QLineSeries( self.chart )
 		pen = self.temperatureSeries.pen()
 		pen.setWidthF(2.)
@@ -47,6 +59,7 @@ class Graph(QChartView):
 		x_axis.setFormat("HH:mm:ss")
 		self.chart.addAxis( x_axis, Qt.AlignBottom )
 		self.temperatureSeries.attachAxis( x_axis )
+		self.setpointTemperatureSeries.attachAxis( x_axis )
 		startDate = QDateTime.currentDateTime().addSecs( -5 * 60 )
 		endDate = QDateTime.currentDateTime().addSecs( 5 * 60 )
 		#startDate = QDateTime(QDate(2017, 1, 9), QTime(17, 25, 0))
@@ -58,10 +71,12 @@ class Graph(QChartView):
 		y_axis.setTitleText( "Temperature (K)" )
 		self.chart.addAxis( y_axis, Qt.AlignLeft )
 		self.temperatureSeries.attachAxis( y_axis )
+		self.setpointTemperatureSeries.attachAxis( y_axis )
 		self.chart.axisY().setRange( 0, 400 )
 		#self.chart.axisY().setRange( 260., 290. )
 
 		self.temperatureSeries.pointAdded.connect( self.Rescale_Axes )
+		#self.setpointTemperatureSeries.pointAdded.connect( self.Rescale_Axes )
 
 		self.setRubberBand( QChartView.HorizontalRubberBand )
 
@@ -109,6 +124,8 @@ class Graph(QChartView):
 	def add_new_data_point( self, x, y ):
 		x_as_millisecs = x.toMSecsSinceEpoch()
 		self.temperatureSeries.append( x_as_millisecs, y )
+		if( self.setpoint_temperature ):
+			self.setpointTemperatureSeries.append( x_as_millisecs, self.setpoint_temperature )
 
 		num_of_datapoints = self.temperatureSeries.count()
 		#if( num_of_datapoints > self.number_of_samples_to_keep ):
@@ -128,9 +145,10 @@ class Graph(QChartView):
 			self.xMax = x
 			x_rescaled = True
 		if( x_rescaled ):
-			full_range = self.xMax - self.xMin
+			full_range = min( self.xMax - self.xMin, 5 * 60 * 1000 )
 			margin = full_range * 0.05
-			self.chart.axisX().setRange( QDateTime.fromMSecsSinceEpoch(self.xMin - margin), QDateTime.fromMSecsSinceEpoch(self.xMax + margin) )
+
+			self.chart.axisX().setRange( QDateTime.fromMSecsSinceEpoch(self.xMax - full_range - margin), QDateTime.fromMSecsSinceEpoch(self.xMax + margin) )
 			
 		y = self.temperatureSeries.at( index ).y()
 		y_rescaled = False
