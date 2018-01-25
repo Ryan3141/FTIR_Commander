@@ -23,13 +23,15 @@ class Device:
 		self.raw_data_stream = ""
 
 class Device_Communicator( QtCore.QObject ):
+	Device_Connected = QtCore.pyqtSignal(str)
+	Device_Disonnected = QtCore.pyqtSignal(str)
 	Reply_Recieved = QtCore.pyqtSignal(str, Device)
 	File_Recieved = QtCore.pyqtSignal(str, Device)
 
 	def __init__( self, parent, identifier_string, listener_address, port ):
 		super().__init__( parent )
 		#self.setAttribute(QtCore.Qt.WA_DeleteOnClose)
-		self.port_for_ping = port
+		self.port_for_ping = int(port)
 		self.active_connections = {}
 		self.tcp_server = QtNetwork.QTcpServer()
 		self.udp_socket = QtNetwork.QUdpSocket()
@@ -87,9 +89,11 @@ class Device_Communicator( QtCore.QObject ):
 
 		new_pSocket.disconnected.connect( lambda : self.Socket_Disconnected(peer_identifier) )
 		new_pSocket.readyRead.connect( lambda : self.Read_From_Socket(peer_identifier) )
+		self.Device_Connected.emit( peer_identifier )
 
 	def Socket_Disconnected( self, peer_identifier ):
-		print( "Disconnected to: " + peer_identifier )
+		print( "Disconnected with: " + peer_identifier )
+		self.Device_Disonnected.emit( peer_identifier )
 		del self.active_connections[ peer_identifier ]
 
 	def Read_From_Socket( self, peer_identifier ):

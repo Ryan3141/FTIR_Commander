@@ -2,9 +2,15 @@ from PyQt5 import QtNetwork, QtCore, QtGui, uic, QtWidgets
 import os
 import sys
 import sqlite3
+try:
+	import MySQLdb
+except:
+	print( "Need to install mysql plugin, run: pip install mysqlclient")
+	exit()
 import hashlib
 from datetime import datetime
 import re
+import configparser
 
 import numpy as np
 from Temperature_Controller import Temperature_Controller
@@ -33,22 +39,41 @@ class MyApp(QtWidgets.QMainWindow, Ui_MainWindow):
 
 
 	def Init_Subsystems( self ):
-		self.Connect_To_SQL()
-		self.temp_controller = Temperature_Controller( self )
-		#self.omnic_controller = Omnic_Controller( parent=self,
-		#						directory_for_commands=r"C:\Users\Ryan\Documents\Visual Studio 2017\Projects\FTIR_Commander\FTIR_Commander\Commands",
-		#						directory_for_results=r"C:\Users\Ryan\Documents\Visual Studio 2017\Projects\FTIR_Commander\FTIR_Commander\Outputs" )
-		self.omnic_controller = Omnic_Controller( parent=self, directory_for_commands=r"\\NICCOMP\ExportData\Commands", directory_for_results=r"\\NICCOMP\ExportData\Output" )
-		recheck_timer = QtCore.QTimer( self )
-		recheck_timer.timeout.connect( self.temp_controller.Update )
-		recheck_timer.start( 500 )
+		config = configparser.ConfigParser()
+		config.read('configuration.ini')
 
-		#try:
-		#	#self.app = ftir_application( directory_for_commands=r"\\NICCOMP\ExportData\Commands", directory_for_results=r"\\NICCOMP\ExportData\Output" )
-		#	self.app = ftir_application( directory_for_commands=r"C:\Users\Ryan\Documents\Visual Studio 2017\Projects\FTIR_Commander\FTIR_Commander\Commands",
-		#					   directory_for_results=r"C:\Users\Ryan\Documents\Visual Studio 2017\Projects\FTIR_Commander\FTIR_Commander\Outputs" )
-		#except Exception as err:
-		#	messagebox.showerror( "Error", err )
+		self.Connect_To_SQL( config )
+		self.temp_controller = Temperature_Controller( config, parent=self )
+		self.omnic_controller = Omnic_Controller( config, parent=self )
+		temp_controller_recheck_timer = QtCore.QTimer( self )
+		temp_controller_recheck_timer.timeout.connect( self.temp_controller.Update )
+		temp_controller_recheck_timer.start( 500 )
+		omnic_recheck_timer = QtCore.QTimer( self )
+		omnic_recheck_timer.timeout.connect( lambda : self.omnic_controller.Update() )
+		omnic_recheck_timer.start( 500 )
+		self.Temp_Controller_Disconnected()
+		self.Omnic_Disconnected()
+		self.temp_controller.Device_Connected.connect( self.Temp_Controller_Connected )
+		self.temp_controller.Device_Disconnected.connect( self.Temp_Controller_Disconnected )
+		self.omnic_controller.Device_Connected.connect( self.Omnic_Connected )
+		self.omnic_controller.Device_Disconnected.connect( self.Omnic_Disconnected )
+
+
+	def Temp_Controller_Connected( self, identifier, type_of_connection ):
+		self.tempControllerConnected_label.setText( str(identifier) + " Connected" )
+		self.tempControllerConnected_label.setStyleSheet("QLabel { background-color: rgba(0,255,0,255); color: rgba(0, 0, 0,255) }")
+
+	def Temp_Controller_Disconnected( self ):
+		self.tempControllerConnected_label.setText( "Temperature Controller Not Connected" )
+		self.tempControllerConnected_label.setStyleSheet("QLabel { background-color: rgba(255,0,0,255); color: rgba(0, 0, 0,255) }")
+
+	def Omnic_Connected( self, ip_address ):
+		self.omnicConnected_label.setText( "Omnic Connected at " + str(ip_address) )
+		self.omnicConnected_label.setStyleSheet("QLabel { background-color: rgba(0,255,0,255); color: rgba(0, 0, 0,255) }")
+
+	def Omnic_Disconnected( self ):
+		self.omnicConnected_label.setText( "Omnic Not Connected" )
+		self.omnicConnected_label.setStyleSheet("QLabel { background-color: rgba(255,0,0,255); color: rgba(0, 0, 0,255) }")
 
 	def Connect_Control_Logic( self ):
 		self.run_pushButton.clicked.connect( self.Start_Measurement )
@@ -60,9 +85,13 @@ class MyApp(QtWidgets.QMainWindow, Ui_MainWindow):
 		#print( "Temp: " + str(temperature) )
 		self.temperature_graph.add_new_data_point( QtCore.QDateTime.currentDateTime(), temperature )
 
-	def Connect_To_SQL( self ):
+	def Connect_To_SQL( self, configuration_file ):
 		try:
-			self.sql_conn = sqlite3.connect( "FTIR_Data.db" )
+			if configuration_file['SQL_Server']['database_type'] == "QSQLITE":
+				self.sql_conn = sqlite3.connect( configuration_file['SQL_Server']['database_name'] )
+			elif configuration_file['SQL_Server']['database_type'] == "QMYSQL":
+				self.sql_conn = MySQLdb.connect(host=configuration_file['SQL_Server']['host_location'],db=configuration_file['SQL_Server']['database_name'],
+									user=configuration_file['SQL_Server']['username'],passwd=configuration_file['SQL_Server']['password'])
 		except sqlite3.Error as e:
 			error = QtWidgets.QMessageBox()
 			error.setIcon( QtWidgets.QMessageBox.Critical )
@@ -78,9 +107,6 @@ class MyApp(QtWidgets.QMainWindow, Ui_MainWindow):
 		if( self.temp_controller ):
 			self.temp_controller.Turn_Off()
 			self.temperature_graph.setpoint_temperature = None
-
-		#for device_id, device in device_communicator.active_connections:
-		#	self.device_communicator.Send_Command( ("Turn Off;\n").encode(), device )
 
 
 	def Start_Measurement( self ):
@@ -127,8 +153,10 @@ class MyApp(QtWidgets.QMainWindow, Ui_MainWindow):
 				print( "Starting Measurement\n" )
 				self.omnic_controller.Measure_Background( sample_name )
 
-				while( not self.omnic_controller.Update() ):
+				while( not self.omnic_controller.got_file_over_tcp ):
 					QtCore.QCoreApplication.processEvents()
+
+				self.omnic_controller.got_file_over_tcp = False
 
 		self.Turn_Off_Temp()
 		self.omnic_controller.Set_Response_Function(
@@ -142,9 +170,13 @@ class MyApp(QtWidgets.QMainWindow, Ui_MainWindow):
 def Create_Table_If_Needed( sql_conn ):
 	cur = sql_conn.cursor()
 	try:
-		cur.execute("""CREATE TABLE `ftir_measurements` ( `sample_name` TEXT NOT NULL, `time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, `measurement_id` TEXT NOT NULL, `temperature_in_k` REAL, `bias_in_v` REAL )""")
+		cur.execute("""CREATE TABLE `ftir_measurements` ( `sample_name` TEXT NOT NULL, `time` DATETIME NOT NULL, `measurement_id` TEXT NOT NULL, `temperature_in_k` REAL, `bias_in_v` REAL )""")
+	except (MySQLdb.Error, MySQLdb.Warning) as e:
+		pass
+		#print(e)
 	except:
 		pass # Will cause exception if they already exist, but that's fine since we are just trying to make sure they exist
+
 	try:
 		cur.execute("""CREATE TABLE `raw_ftir_data` ( `measurement_id` TEXT NOT NULL, `wavenumber` REAL NOT NULL, `intensity` REAL NOT NULL );""")
 	except:
@@ -171,7 +203,7 @@ def Deal_With_FTIR_Data( ftir_file_contents, sql_conn, sample_name, temperature_
 	#m.update( 'Test'.encode() )
 	m.update( (sample_name + str( datetime.now() ) + ','.join(intensity) ).encode() )
 	measurement_id = m.hexdigest()
-	meta_data_sql_string = '''INSERT INTO ftir_measurements(sample_name,measurement_id,temperature_in_k,bias_in_v) VALUES(?,?,?,?)'''
+	meta_data_sql_string = '''INSERT INTO ftir_measurements(sample_name,measurement_id,temperature_in_k,bias_in_v,time) VALUES(?,?,?,?,now())'''
 	data_sql_string = '''INSERT INTO raw_ftir_data(measurement_id,wavenumber,intensity) VALUES(?,?,?)'''
 	cur = sql_conn.cursor()
 	cur.execute( meta_data_sql_string, (sample_name,measurement_id,temperature_in_k,bias_in_v) )

@@ -22,10 +22,6 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Device_Communicator.py" />
-    <Compile Include="FTIR_Commander.py" />
-    <Compile Include="FTIR_GUI.py">
-      <SubType>Code</SubType>
-    </Compile>
     <Compile Include="Graph.py">
       <SubType>Code</SubType>
     </Compile>

@@ -36,11 +36,42 @@ color: rgb(255, 190, 37);</string>
           <item>
            <layout class="QVBoxLayout" name="verticalLayout_8">
             <item>
-             <widget class="QLabel" name="label_2">
-              <property name="text">
-               <string>Sample Name</string>
-              </property>
-             </widget>
+             <layout class="QHBoxLayout" name="horizontalLayout_4">
+              <item>
+               <widget class="QLabel" name="label_2">
+                <property name="text">
+                 <string>Sample Name</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <spacer name="horizontalSpacer">
+                <property name="orientation">
+                 <enum>Qt::Horizontal</enum>
+                </property>
+                <property name="sizeHint" stdset="0">
+                 <size>
+                  <width>40</width>
+                  <height>20</height>
+                 </size>
+                </property>
+               </spacer>
+              </item>
+              <item>
+               <widget class="QLabel" name="omnicConnected_label">
+                <property name="text">
+                 <string>Omnic Not Connected</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QLabel" name="tempControllerConnected_label">
+                <property name="text">
+                 <string>Temperature Controller Not Connected</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
             </item>
             <item>
              <widget class="QLineEdit" name="sampleName_lineEdit"/>
