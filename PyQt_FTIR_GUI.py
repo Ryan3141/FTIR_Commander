@@ -76,6 +76,7 @@ class MyApp(QtWidgets.QMainWindow, Ui_MainWindow):
 		self.omnicConnected_label.setStyleSheet("QLabel { background-color: rgba(255,0,0,255); color: rgba(0, 0, 0,255) }")
 
 	def Connect_Control_Logic( self ):
+		self.Stop_Measurment()
 		self.run_pushButton.clicked.connect( self.Start_Measurement )
 
 		self.temp_controller.Temperature_Changed.connect( self.Temperature_Update )
@@ -130,8 +131,24 @@ class MyApp(QtWidgets.QMainWindow, Ui_MainWindow):
 		else:
 			biases_to_measure = [None]
 
+		self.run_pushButton.clicked.disconnect()
+		self.run_pushButton.setText( "Stop Measurement" )
+		self.run_pushButton.setStyleSheet("QPushButton { background-color: rgba(255,0,0,255); color: rgba(0, 0, 0,255); }")
+		self.run_pushButton.clicked.connect( self.Stop_Measurment )
+
 		self.Run_Measurment_Loop( sample_name, temperatures_to_measure, biases_to_measure )
 
+	def Stop_Measurment( self ):
+		if self.temp_controller is not None:
+			self.temp_controller.Turn_Off()
+
+		try: self.run_pushButton.clicked.disconnect() 
+		except Exception: pass
+		
+		self.run_pushButton.setText( "Run Sweep" )
+		self.run_pushButton.setStyleSheet("QPushButton { background-color: rgba(0,255,0,255); color: rgba(0, 0, 0,255); }")
+		self.run_pushButton.clicked.connect( self.Start_Measurement )
+		self.quit_early = True
 
 	def Run_Measurment_Loop( self, sample_name, temperatures_to_measure, biases_to_measure ):
 		for temperature in temperatures_to_measure:
@@ -148,6 +165,13 @@ class MyApp(QtWidgets.QMainWindow, Ui_MainWindow):
 
 					while( not self.temp_controller.Temperature_Is_Stable() ):
 						QtCore.QCoreApplication.processEvents()
+						if( self.quit_early ):
+							self.Turn_Off_Temp()
+							self.omnic_controller.Set_Response_Function(
+								lambda ftir_file_contents : None )
+
+							self.quit_early = False
+							return
 					print( "Temperature stable around: " + str(temperature) + '\n' )
 
 				print( "Starting Measurement\n" )
@@ -155,6 +179,9 @@ class MyApp(QtWidgets.QMainWindow, Ui_MainWindow):
 
 				while( not self.omnic_controller.got_file_over_tcp ):
 					QtCore.QCoreApplication.processEvents()
+					#if( self.quit_early ):
+					#	self.Quitting_Early.emit()
+					#	return
 
 				self.omnic_controller.got_file_over_tcp = False
 

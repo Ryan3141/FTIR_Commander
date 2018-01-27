@@ -37,11 +37,8 @@ class Temperature_Controller( QtCore.QObject ):
 		except:
 			self.device_communicator = None
 
-		if self.Attempt_Serial_Connection():
-			success = True
-
 		if( not success ):
-			raise Exception( "Issue finding any device, please make sure it is connected" )
+			raise Exception( "Issue connecting to wifi with given configuration.ini, please make sure it is connected" )
 
 		self.current_temperature = None
 		self.setpoint_temperature = None
@@ -53,7 +50,7 @@ class Temperature_Controller( QtCore.QObject ):
 		for port in GetAvailablePorts():
 			try:
 				self.serial_connection = serial.Serial(port, 115200, timeout=0)
-				self.Device_Connected( str(port), "Serial" )
+				self.Device_Connected.emit( str(port), "Serial" )
 				return True
 			except:
 				pass
@@ -63,7 +60,8 @@ class Temperature_Controller( QtCore.QObject ):
 	def Update( self ):
 		if( self.device_communicator.No_Devices_Connected() ):
 			self.device_communicator.Poll_LocalIPs_For_Devices( '192.168.1-2.2-254' )
-			self.Attempt_Serial_Connection()
+			if not self.serial_connection:
+				self.Attempt_Serial_Connection()
 
 		if self.serial_connection is not None:
 			if not self.device_communicator.No_Devices_Connected():
