@@ -77,6 +77,7 @@ class MyApp(QtWidgets.QMainWindow, Ui_MainWindow):
 
 	def Connect_Control_Logic( self ):
 		self.Stop_Measurment()
+		self.quit_early = False
 		self.run_pushButton.clicked.connect( self.Start_Measurement )
 
 		self.temp_controller.Temperature_Changed.connect( self.Temperature_Update )

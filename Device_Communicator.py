@@ -24,7 +24,7 @@ class Device:
 
 class Device_Communicator( QtCore.QObject ):
 	Device_Connected = QtCore.pyqtSignal(str)
-	Device_Disonnected = QtCore.pyqtSignal(str)
+	Device_Disconnected = QtCore.pyqtSignal(str)
 	Reply_Recieved = QtCore.pyqtSignal(str, Device)
 	File_Recieved = QtCore.pyqtSignal(str, Device)
 
@@ -62,10 +62,17 @@ class Device_Communicator( QtCore.QObject ):
 				self.Send_Command( command, device )
 
 
+	def Keep_Retrying_TCP_Connection( self ):
+		result = self.tcp_server.listen( ip_to_listen_on, self.port_for_ping )
+		if result == False:
+			QtCore.QTimer.singleShot( 1000, self, self.Keep_Retrying_TCP_Connection )
+
 	def Listen_For_Replies( self, ip_to_listen_on ):
 		result = self.tcp_server.listen( ip_to_listen_on, self.port_for_ping )
 		if( not result ):
 			return False
+
+		self.tcp_server.destroyed.connect( self.Keep_Retrying_TCP_Connection )
 
 		self.tcp_server.newConnection.connect( self.Handle_New_Connection )
 
@@ -83,6 +90,7 @@ class Device_Communicator( QtCore.QObject ):
 
 		peer_identifier = peer_ip + ":" + str( peer_port );
 		self.active_connections[ peer_identifier ] = Device( pSocket = new_pSocket )
+		connected_device = self.active_connections[ peer_identifier ]
 		print( QtCore.QDateTime.currentDateTime().toString() + ": Response from {}:{}".format( peer_ip, peer_port ) )
 		# Tell TCP socket to timeout if unexpectedly disconnected
 		new_pSocket.setSocketOption( QtNetwork.QAbstractSocket.KeepAliveOption, 1 );
@@ -90,14 +98,24 @@ class Device_Communicator( QtCore.QObject ):
 		new_pSocket.disconnected.connect( lambda : self.Socket_Disconnected(peer_identifier) )
 		new_pSocket.readyRead.connect( lambda : self.Read_From_Socket(peer_identifier) )
 		self.Device_Connected.emit( peer_identifier )
+		connected_device.timer = QtCore.QTimer()
+		connected_device.timer.setSingleShot( True )
+		connected_device.timer.timeout.connect( lambda : self.Socket_Disconnected( peer_identifier ) )
+		connected_device.timer.start(5000)
 
 	def Socket_Disconnected( self, peer_identifier ):
-		print( "Disconnected with: " + peer_identifier )
-		self.Device_Disonnected.emit( peer_identifier )
-		del self.active_connections[ peer_identifier ]
+		if peer_identifier in self.active_connections.keys():
+			print( self.active_connections.keys() )
+			socket_to_close = self.active_connections[ peer_identifier ].pSocket
+			del self.active_connections[ peer_identifier ]
+			socket_to_close.close() # this line calls Socket_Disconnected again, so must delete key first to avoid double calling
+			print( "Disconnected with: " + peer_identifier )
+			self.Device_Disconnected.emit( peer_identifier )
 
 	def Read_From_Socket( self, peer_identifier ):
 		connected_device = self.active_connections[ peer_identifier ]
+		connected_device.timer.setInterval( 5000 )
+
 		data = connected_device.pSocket.readAll()
 		connected_device.raw_data_stream += bytes(data).decode()
 		split_by_line = connected_device.raw_data_stream.split( '\n' )

@@ -32,7 +32,7 @@ class Temperature_Controller( QtCore.QObject ):
 			success = True
 			self.device_communicator.Reply_Recieved.connect( lambda message, device : self.ParseMessage( message ) )
 			self.device_communicator.Device_Connected.connect( lambda peer_identifier : self.Device_Connected.emit( peer_identifier, "Wifi" ) )
-			self.device_communicator.Device_Disonnected.connect( lambda peer_identifier : self.Device_Disconnected.emit( peer_identifier, "Wifi" ) )
+			self.device_communicator.Device_Disconnected.connect( lambda peer_identifier : self.Device_Disconnected.emit( peer_identifier, "Wifi" ) )
 
 		except:
 			self.device_communicator = None
