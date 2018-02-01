@@ -18,7 +18,7 @@ class Omnic_Controller( QtCore.QObject ):
 		self.ip_range = configuration_file['Omnic_Communicator']['ip_range']
 		try:
 			self.device_communicator = Device_Communicator( parent, identifier_string=configuration_file['Omnic_Communicator']['Listener_Type'], listener_address=None,
-												  port=configuration_file['Omnic_Communicator']['Listener_Port'] )
+												  port=configuration_file['Omnic_Communicator']['Listener_Port'], timeout_ms=120000 )
 			self.device_communicator.Reply_Recieved.connect( lambda message, device : self.ParseMessage( message ) )
 			self.device_communicator.File_Recieved.connect( lambda message, device : self.ParseFile( message ) )
 			self.device_communicator.Device_Connected.connect( lambda peer_identifier : self.Device_Connected.emit( peer_identifier, "Wifi" ) )
