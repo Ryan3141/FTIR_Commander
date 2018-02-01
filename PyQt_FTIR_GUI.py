@@ -172,6 +172,7 @@ class MyApp(QtWidgets.QMainWindow, Ui_MainWindow):
 					while( not self.temp_controller.Temperature_Is_Stable() ):
 						QtCore.QCoreApplication.processEvents()
 						if( self.quit_early ):
+							print( "Quitting measurment early" )
 							self.Turn_Off_Temp()
 							self.omnic_controller.Set_Response_Function(
 								lambda ftir_file_contents : None )
@@ -196,6 +197,7 @@ class MyApp(QtWidgets.QMainWindow, Ui_MainWindow):
 			lambda ftir_file_contents : None )
 
 		print( "Finished Measurment" )
+		self.Stop_Measurment()
 
 
 
@@ -236,8 +238,8 @@ def Deal_With_FTIR_Data( ftir_file_contents, user, sql_conn, sample_name, temper
 	#m.update( 'Test'.encode() )
 	m.update( (sample_name + str( datetime.now() ) + ','.join(intensity) ).encode() )
 	measurement_id = m.hexdigest()
-	meta_data_sql_string = '''INSERT INTO ftir_measurements(sample_name,user,measurement_id,temperature_in_k,bias_in_v,time) VALUES(?,?,?,?,?,now())'''
-	data_sql_string = '''INSERT INTO raw_ftir_data(measurement_id,wavenumber,intensity) VALUES(?,?,?)'''
+	meta_data_sql_string = '''INSERT INTO ftir_measurements(sample_name,user,measurement_id,temperature_in_k,bias_in_v,time) VALUES(%s,%s,%s,%s,%s,now())'''
+	data_sql_string = '''INSERT INTO raw_ftir_data(measurement_id,wavenumber,intensity) VALUES(%s,%s,%s)'''
 	cur = sql_conn.cursor()
 	cur.execute( meta_data_sql_string, (sample_name,user,measurement_id,temperature_in_k,bias_in_v) )
 	cur.executemany( data_sql_string, zip([measurement_id for x in range(len(wave_number))],wave_number,intensity) )

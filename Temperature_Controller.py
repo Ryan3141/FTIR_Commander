@@ -131,7 +131,7 @@ class Temperature_Controller( QtCore.QObject ):
 		error = np.array( self.past_temperatures ) - self.setpoint_temperature
 		deviation = np.std( error )
 		average_error = np.mean( error )
-		if( abs(average_error) < 1 and deviation < 0.5 ):
+		if( abs(average_error) < .5 and deviation < 0.2 ):
 			return True
 		else:
 			return False
