@@ -181,7 +181,7 @@ class MyApp(QtWidgets.QMainWindow, Ui_MainWindow):
 					print( "Temperature stable around: " + str(temperature) + '\n' )
 
 				print( "Starting Measurement\n" )
-				self.omnic_controller.Measure_Background( sample_name )
+				self.omnic_controller.Measure_Sample( sample_name )
 
 				while( not self.omnic_controller.got_file_over_tcp ):
 					QtCore.QCoreApplication.processEvents()
