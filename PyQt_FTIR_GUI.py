@@ -58,8 +58,9 @@ class MyApp(QtWidgets.QMainWindow, Ui_MainWindow):
 		self.omnic_controller.Device_Connected.connect( self.Omnic_Connected )
 		self.omnic_controller.Device_Disconnected.connect( self.Omnic_Disconnected )
 
-		user = configuration_file['Omnic_Communicator']['user']
-		self.user_lineEdit.setText( configuration_file['Omnic_Communicator']['user'] )
+		user = config['Omnic_Communicator']['user']
+		if user:
+			self.user_lineEdit.setText( user )
 
 
 	def Temp_Controller_Connected( self, identifier, type_of_connection ):
