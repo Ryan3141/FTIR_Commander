@@ -58,6 +58,9 @@ class MyApp(QtWidgets.QMainWindow, Ui_MainWindow):
 		self.omnic_controller.Device_Connected.connect( self.Omnic_Connected )
 		self.omnic_controller.Device_Disconnected.connect( self.Omnic_Disconnected )
 
+		user = configuration_file['Omnic_Communicator']['user']
+		self.user_lineEdit.setText( configuration_file['Omnic_Communicator']['user'] )
+
 
 	def Temp_Controller_Connected( self, identifier, type_of_connection ):
 		self.tempControllerConnected_label.setText( str(identifier) + " Connected" )
@@ -116,10 +119,11 @@ class MyApp(QtWidgets.QMainWindow, Ui_MainWindow):
 		v_start, v_end, v_step = float(self.lowerVoltage_lineEdit.text()), float(self.upperVoltage_lineEdit.text()), float(self.stepVoltage_lineEdit.text())
 		
 		sample_name = self.sampleName_lineEdit.text()
-		if( sample_name == "" ):
+		user = self.user_lineEdit.text()
+		if( sample_name == "" or user == "" ):
 			error = QtWidgets.QMessageBox()
 			error.setIcon( QtWidgets.QMessageBox.Critical )
-			error.setText( "Must enter a sample name" )
+			error.setText( "Must enter a sample name and user" )
 			error.setWindowTitle( "Error" )
 			error.exec_()
 			return
@@ -137,7 +141,7 @@ class MyApp(QtWidgets.QMainWindow, Ui_MainWindow):
 		self.run_pushButton.setStyleSheet("QPushButton { background-color: rgba(255,0,0,255); color: rgba(0, 0, 0,255); }")
 		self.run_pushButton.clicked.connect( self.Stop_Measurment )
 
-		self.Run_Measurment_Loop( sample_name, temperatures_to_measure, biases_to_measure )
+		self.Run_Measurment_Loop( sample_name, user, temperatures_to_measure, biases_to_measure )
 
 	def Stop_Measurment( self ):
 		if self.temp_controller is not None:
@@ -151,12 +155,12 @@ class MyApp(QtWidgets.QMainWindow, Ui_MainWindow):
 		self.run_pushButton.clicked.connect( self.Start_Measurement )
 		self.quit_early = True
 
-	def Run_Measurment_Loop( self, sample_name, temperatures_to_measure, biases_to_measure ):
+	def Run_Measurment_Loop( self, sample_name, user, temperatures_to_measure, biases_to_measure ):
 		for temperature in temperatures_to_measure:
 			for bias in biases_to_measure:
 				self.omnic_controller.Set_Response_Function(
 					lambda ftir_file_contents :
-					Deal_With_FTIR_Data( ftir_file_contents, self.sql_conn,
+					Deal_With_FTIR_Data( ftir_file_contents, user, self.sql_conn,
 							sample_name, temperature, bias ) )
 
 				if( temperature ): # None is ok, just means we don't know the temperature
@@ -213,7 +217,7 @@ def Create_Table_If_Needed( sql_conn ):
 	cur.close()
 	return False
 
-def Deal_With_FTIR_Data( ftir_file_contents, sql_conn, sample_name, temperature_in_k, bias_in_v ):
+def Deal_With_FTIR_Data( ftir_file_contents, user, sql_conn, sample_name, temperature_in_k, bias_in_v ):
 	#output_command_file = open( './test_auto.csv', 'w' )
 	#output_command_file.write( file_contents )
 	#output_command_file.close()
@@ -231,10 +235,10 @@ def Deal_With_FTIR_Data( ftir_file_contents, sql_conn, sample_name, temperature_
 	#m.update( 'Test'.encode() )
 	m.update( (sample_name + str( datetime.now() ) + ','.join(intensity) ).encode() )
 	measurement_id = m.hexdigest()
-	meta_data_sql_string = '''INSERT INTO ftir_measurements(sample_name,measurement_id,temperature_in_k,bias_in_v,time) VALUES(?,?,?,?,now())'''
+	meta_data_sql_string = '''INSERT INTO ftir_measurements(sample_name,user,measurement_id,temperature_in_k,bias_in_v,time) VALUES(?,?,?,?,?,now())'''
 	data_sql_string = '''INSERT INTO raw_ftir_data(measurement_id,wavenumber,intensity) VALUES(?,?,?)'''
 	cur = sql_conn.cursor()
-	cur.execute( meta_data_sql_string, (sample_name,measurement_id,temperature_in_k,bias_in_v) )
+	cur.execute( meta_data_sql_string, (sample_name,user,measurement_id,temperature_in_k,bias_in_v) )
 	cur.executemany( data_sql_string, zip([measurement_id for x in range(len(wave_number))],wave_number,intensity) )
 	sql_conn.commit()
 
