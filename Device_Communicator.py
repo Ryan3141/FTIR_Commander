@@ -20,13 +20,13 @@ def Sanitize_SQL( raw_string ):
 class Device:
 	def __init__( self, pSocket ):
 		self.pSocket = pSocket
-		self.raw_data_stream = ""
+		self.raw_data_stream = b""
 
 class Device_Communicator( QtCore.QObject ):
 	Device_Connected = QtCore.pyqtSignal(str)
 	Device_Disconnected = QtCore.pyqtSignal(str)
 	Reply_Recieved = QtCore.pyqtSignal(str, Device)
-	File_Recieved = QtCore.pyqtSignal(str, Device)
+	File_Recieved = QtCore.pyqtSignal(str, bytes, Device)
 
 	def __init__( self, parent, identifier_string, listener_address, port, timeout_ms=5000 ):
 		super().__init__( parent )
@@ -118,27 +118,42 @@ class Device_Communicator( QtCore.QObject ):
 		connected_device.timer.setInterval( self.timeout_ms )
 
 		data = connected_device.pSocket.readAll()
-		connected_device.raw_data_stream += bytes(data).decode()
-		split_by_line = connected_device.raw_data_stream.split( '\n' )
-		connected_device.raw_data_stream = split_by_line[-1]
+		connected_device.raw_data_stream += bytes(data)
+		#connected_device.raw_data_stream = split_by_line[-1]
 
-		re = QtCore.QRegularExpression( '''^FILE (\d+)$''' );
-		for index,line in enumerate( split_by_line ):
-			match = re.match( line );
-			if not match.hasMatch():
-				continue
-			size_of_file = int(match.captured( 1 ))
-			size_of_header = len(line) + 1
-			connected_device.raw_data_stream = '\n'.join( split_by_line[index:] )
-			if( len(connected_device.raw_data_stream) >= size_of_header + size_of_file ):
-				self.File_Recieved.emit( connected_device.raw_data_stream[size_of_header:size_of_header + size_of_file], connected_device )
-				connected_device.raw_data_stream = connected_device.raw_data_stream[size_of_header + size_of_file:]
+		pure_text_messages = []
 
-			break
+		# This chunk will extract any files being written over the socket
+		re = QtCore.QRegularExpression( '''^FILE\s*"([^\\<>:;,?"*|/]+)"\s*(\d+)$''' );
+		rerun = True
+		while rerun:
+			rerun = False
+			split_by_line = connected_device.raw_data_stream.split( b'\n' )
+			for index,line in enumerate( split_by_line[:-1] ):
+				try:
+					if line == b"Ping":
+						continue
+					else:
+						match = re.match( line.decode() );
+				except:
+					continue
+				if not match.hasMatch():
+					pure_text_messages.append( line )
+					continue
 
+				file_name = match.captured( 1 )
+				size_of_file = int(match.captured( 2 ))
+				size_of_header = len(line) + 1
+				connected_device.raw_data_stream = b'\n'.join( split_by_line[index:] )
+				if( len(connected_device.raw_data_stream) >= size_of_header + size_of_file ):
+					self.File_Recieved.emit( file_name, connected_device.raw_data_stream[size_of_header:size_of_header + size_of_file], connected_device )
+					connected_device.raw_data_stream = connected_device.raw_data_stream[size_of_header + size_of_file:]
+					rerun = True # Make sure there were no other interesting messages
 
-		for one_line in split_by_line[:-1]:
-			self.Reply_Recieved.emit( one_line, connected_device )
+				break
+
+		for one_line in pure_text_messages:
+			self.Reply_Recieved.emit( one_line.decode(), connected_device )
 
 def Convert_IP_Range_To_List( ip_range ):
 	return Recursive_Convert_IP_Range_To_List( ip_range, 0 )

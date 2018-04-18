@@ -98,6 +98,7 @@ class MyApp(QtWidgets.QMainWindow, Ui_MainWindow):
 			elif configuration_file['SQL_Server']['database_type'] == "QMYSQL":
 				self.sql_conn = MySQLdb.connect(host=configuration_file['SQL_Server']['host_location'],db=configuration_file['SQL_Server']['database_name'],
 									user=configuration_file['SQL_Server']['username'],passwd=configuration_file['SQL_Server']['password'])
+				self.sql_conn.ping( True ) # Maintain connection to avoid timing out
 		except sqlite3.Error as e:
 			error = QtWidgets.QMessageBox()
 			error.setIcon( QtWidgets.QMessageBox.Critical )
@@ -120,7 +121,7 @@ class MyApp(QtWidgets.QMainWindow, Ui_MainWindow):
 		v_start, v_end, v_step = float(self.lowerVoltage_lineEdit.text()), float(self.upperVoltage_lineEdit.text()), float(self.stepVoltage_lineEdit.text())
 		
 		sample_name = self.sampleName_lineEdit.text()
-		user = self.user_lineEdit.text()
+		user = str( self.user_lineEdit.text() )
 		if( sample_name == "" or user == "" ):
 			error = QtWidgets.QMessageBox()
 			error.setIcon( QtWidgets.QMessageBox.Critical )
@@ -142,6 +143,7 @@ class MyApp(QtWidgets.QMainWindow, Ui_MainWindow):
 		self.run_pushButton.setStyleSheet("QPushButton { background-color: rgba(255,0,0,255); color: rgba(0, 0, 0,255); }")
 		self.run_pushButton.clicked.connect( self.Stop_Measurment )
 
+		self.omnic_controller.Request_Settings()
 		self.Run_Measurment_Loop( sample_name, user, temperatures_to_measure, biases_to_measure )
 
 	def Stop_Measurment( self ):
@@ -160,8 +162,8 @@ class MyApp(QtWidgets.QMainWindow, Ui_MainWindow):
 		for temperature in temperatures_to_measure:
 			for bias in biases_to_measure:
 				self.omnic_controller.Set_Response_Function(
-					lambda ftir_file_contents :
-					Deal_With_FTIR_Data( ftir_file_contents, user, self.sql_conn,
+					lambda file_name, file_contents :
+					Deal_With_FTIR_Data( file_contents, user, self.sql_conn,
 							sample_name, temperature, bias ) )
 
 				if( temperature ): # None is ok, just means we don't know the temperature
@@ -175,7 +177,7 @@ class MyApp(QtWidgets.QMainWindow, Ui_MainWindow):
 							print( "Quitting measurment early" )
 							self.Turn_Off_Temp()
 							self.omnic_controller.Set_Response_Function(
-								lambda ftir_file_contents : None )
+								lambda file_name, file_contents : None )
 
 							self.quit_early = False
 							return
@@ -194,7 +196,7 @@ class MyApp(QtWidgets.QMainWindow, Ui_MainWindow):
 
 		self.Turn_Off_Temp()
 		self.omnic_controller.Set_Response_Function(
-			lambda ftir_file_contents : None )
+			lambda file_name, file_contents : None )
 
 		print( "Finished Measurment" )
 		self.Stop_Measurment()
@@ -227,7 +229,7 @@ def Deal_With_FTIR_Data( ftir_file_contents, user, sql_conn, sample_name, temper
 
 	wave_number = []
 	intensity = []
-	for line in re.split( '\n|\r', ftir_file_contents ):
+	for line in re.split( '\n|\r', ftir_file_contents.decode() ):
 		data_split = line.split(',')
 		if len( data_split ) < 2:
 			continue
