@@ -28,7 +28,7 @@ class Device_Communicator( QtCore.QObject ):
 	Reply_Recieved = QtCore.pyqtSignal(str, Device)
 	File_Recieved = QtCore.pyqtSignal(str, bytes, Device)
 
-	def __init__( self, parent, identifier_string, listener_address, port, timeout_ms=5000 ):
+	def __init__( self, parent, identifier_string, listener_address, port, timeout_ms=20000 ):
 		super().__init__( parent )
 		#self.setAttribute(QtCore.Qt.WA_DeleteOnClose)
 		self.timeout_ms = timeout_ms
@@ -129,6 +129,7 @@ class Device_Communicator( QtCore.QObject ):
 		while rerun:
 			rerun = False
 			split_by_line = connected_device.raw_data_stream.split( b'\n' )
+			connected_device.raw_data_stream = split_by_line[-1] # Put back only the unfinished line
 			for index,line in enumerate( split_by_line[:-1] ):
 				try:
 					if line == b"Ping":

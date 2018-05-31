@@ -24,12 +24,15 @@ class Graph(QChartView):
 
 		self.chart = QChart()
 		self.chart.legend().hide()
+		#self.chart.legend().setAlignment( Qt.AlignRight )
+
 		self.setChart( self.chart )
 		self.setRenderHint(QPainter.Antialiasing)
 		self.chart.setPlotAreaBackgroundBrush( QBrush(Qt.black) )
 		self.chart.setPlotAreaBackgroundVisible( True )
 
 		self.setpointTemperatureSeries = QLineSeries( self.chart )
+		self.setpointTemperatureSeries
 		pen = self.setpointTemperatureSeries.pen()
 		pen.setWidthF(2.)
 		pen.setColor( Qt.green )
@@ -44,6 +47,21 @@ class Graph(QChartView):
 		self.temperatureSeries.setPen( pen )
 		#self.temperatureSeries.setUseOpenGL( True )
 		self.chart.addSeries( self.temperatureSeries )
+
+		# The following 2 series are just for labeling the latest temperature
+		self.current_temp_label_series = QLineSeries();
+		self.current_temp_label_series.setPointLabelsVisible(True);
+		self.current_temp_label_series.setPointLabelsClipping(False);
+		self.current_temp_label_series.setPointLabelsColor(Qt.red);
+		self.current_temp_label_series.setPointLabelsFormat("Current Temp: @yPoint K");
+		self.chart.addSeries( self.current_temp_label_series )
+
+		self.set_temp_label_series = QLineSeries();
+		self.set_temp_label_series.setPointLabelsVisible(True);
+		self.set_temp_label_series.setPointLabelsClipping(False);
+		self.set_temp_label_series.setPointLabelsColor(Qt.green);
+		self.set_temp_label_series.setPointLabelsFormat("Set Temp: @yPoint K");
+		self.chart.addSeries( self.set_temp_label_series )
 
 		self.number_of_samples_to_keep = 2 * 5 * 60
 
@@ -60,6 +78,8 @@ class Graph(QChartView):
 		self.chart.addAxis( x_axis, Qt.AlignBottom )
 		self.temperatureSeries.attachAxis( x_axis )
 		self.setpointTemperatureSeries.attachAxis( x_axis )
+		self.current_temp_label_series.attachAxis( x_axis )
+		self.set_temp_label_series.attachAxis( x_axis )
 		startDate = QDateTime.currentDateTime().addSecs( -5 * 60 )
 		endDate = QDateTime.currentDateTime().addSecs( 5 * 60 )
 		#startDate = QDateTime(QDate(2017, 1, 9), QTime(17, 25, 0))
@@ -72,6 +92,8 @@ class Graph(QChartView):
 		self.chart.addAxis( y_axis, Qt.AlignLeft )
 		self.temperatureSeries.attachAxis( y_axis )
 		self.setpointTemperatureSeries.attachAxis( y_axis )
+		self.current_temp_label_series.attachAxis( y_axis )
+		self.set_temp_label_series.attachAxis( y_axis )
 		self.chart.axisY().setRange( 0, 400 )
 		#self.chart.axisY().setRange( 260., 290. )
 
@@ -118,14 +140,35 @@ class Graph(QChartView):
 		x_axis.setTitleBrush(axisBrush)
 		y_axis.setTitleBrush(axisBrush)
 
+		## add the text label at the top:
+		#textLabel = QCPItemText(customPlot);
+		##textLabel.setPositionAlignment( Qt.AlignTop|Qt.AlignHCenter );
+		#textLabel.position.setType(QCPItemPosition.ptAxisRectRatio);
+		#textLabel.position.setCoords(0.5, 0); # place position at center/top of axis rect
+		#textLabel.setText("Text Item Demo");
+		#textLabel.setFont(QFont(font().family(), 16)); # make font a bit larger
+		#textLabel.setPen(QPen(Qt.black)); # show black border around text
+
+		## add the arrow:
+		#self.arrow = QCPItemLine(customPlot);
+		#self.arrow.start.setParentAnchor(textLabel.bottom);
+		#self.arrow.end.setCoords(4, 1.6); # point to (4, 1.6) in x-y-plot coordinates
+		#self.arrow.setHead(QCPLineEnding.esSpikeArrow);
+
 	def set_title(self, title):
 		self.chart.setTitle(title)
 
 	def add_new_data_point( self, x, y ):
 		x_as_millisecs = x.toMSecsSinceEpoch()
 		self.temperatureSeries.append( x_as_millisecs, y )
+		self.current_temp_label_series.clear()
+		self.current_temp_label_series.append( x_as_millisecs, y )
 		if( self.setpoint_temperature ):
 			self.setpointTemperatureSeries.append( x_as_millisecs, self.setpoint_temperature )
+			self.set_temp_label_series.clear()
+			self.set_temp_label_series.append( x_as_millisecs, self.setpoint_temperature )
+		else:
+			self.set_temp_label_series.clear()
 
 		num_of_datapoints = self.temperatureSeries.count()
 		#if( num_of_datapoints > self.number_of_samples_to_keep ):
@@ -133,7 +176,7 @@ class Graph(QChartView):
 		#print( x_as_millisecs, y )
 		#self.chart.scroll( x_as_millisecs - 5 * 60 * 1000, x_as_millisecs )
 		#self.temperatureSeries.append( x, float(y) )
-		#self.repaint()
+		self.repaint()
 
 	def Rescale_Axes( self, index ):
 		x = self.temperatureSeries.at( index ).x()

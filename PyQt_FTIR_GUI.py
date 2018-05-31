@@ -22,6 +22,12 @@ qtCreatorFile = "PyQt_FTIR_GUI.ui" # GUI layout file.
 
 Ui_MainWindow, QtBaseClass = uic.loadUiType(qtCreatorFile)
 
+def toFloatOrNone( as_string ):
+	try:
+		return float( as_string )
+	except:
+		return None
+
 class MyApp(QtWidgets.QMainWindow, Ui_MainWindow):
 
 	#Set_New_Temperature_K = QtCore.pyqtSignal(float)
@@ -57,6 +63,8 @@ class MyApp(QtWidgets.QMainWindow, Ui_MainWindow):
 		self.temp_controller.Device_Disconnected.connect( self.Temp_Controller_Disconnected )
 		self.omnic_controller.Device_Connected.connect( self.Omnic_Connected )
 		self.omnic_controller.Device_Disconnected.connect( self.Omnic_Disconnected )
+		#self.setTemperature_pushButton.clicked.connect( lambda : self.Start_Set_Temperature( float(self.currentTemperature_lineEdit.text()) ) )
+		self.Stop_Set_Temperature()
 
 		user = config['Omnic_Communicator']['user']
 		if user:
@@ -81,7 +89,6 @@ class MyApp(QtWidgets.QMainWindow, Ui_MainWindow):
 
 	def Connect_Control_Logic( self ):
 		self.Stop_Measurment()
-		self.quit_early = False
 		self.run_pushButton.clicked.connect( self.Start_Measurement )
 
 		self.temp_controller.Temperature_Changed.connect( self.Temperature_Update )
@@ -99,6 +106,7 @@ class MyApp(QtWidgets.QMainWindow, Ui_MainWindow):
 				self.sql_conn = MySQLdb.connect(host=configuration_file['SQL_Server']['host_location'],db=configuration_file['SQL_Server']['database_name'],
 									user=configuration_file['SQL_Server']['username'],passwd=configuration_file['SQL_Server']['password'])
 				self.sql_conn.ping( True ) # Maintain connection to avoid timing out
+			self.sql_type = configuration_file['SQL_Server']['database_type']
 		except sqlite3.Error as e:
 			error = QtWidgets.QMessageBox()
 			error.setIcon( QtWidgets.QMessageBox.Critical )
@@ -108,12 +116,7 @@ class MyApp(QtWidgets.QMainWindow, Ui_MainWindow):
 			print( e )
 			return
 
-		Create_Table_If_Needed( self.sql_conn )
-
-	def Turn_Off_Temp( self ):
-		if( self.temp_controller ):
-			self.temp_controller.Turn_Off()
-			self.temperature_graph.setpoint_temperature = None
+		Create_Table_If_Needed( self.sql_conn, self.sql_type )
 
 
 	def Start_Measurement( self ):
@@ -149,6 +152,10 @@ class MyApp(QtWidgets.QMainWindow, Ui_MainWindow):
 	def Stop_Measurment( self ):
 		if self.temp_controller is not None:
 			self.temp_controller.Turn_Off()
+			self.temperature_graph.setpoint_temperature = None
+
+		self.omnic_controller.Set_Response_Function(
+			lambda file_name, file_contents : None )
 
 		try: self.run_pushButton.clicked.disconnect() 
 		except Exception: pass
@@ -156,58 +163,81 @@ class MyApp(QtWidgets.QMainWindow, Ui_MainWindow):
 		self.run_pushButton.setText( "Run Sweep" )
 		self.run_pushButton.setStyleSheet("QPushButton { background-color: rgba(0,255,0,255); color: rgba(0, 0, 0,255); }")
 		self.run_pushButton.clicked.connect( self.Start_Measurement )
-		self.quit_early = True
+		self.measurement_running = False
+
+	def Start_Set_Temperature( self, temperature ):
+		if temperature is None:
+			return
+
+		self.temp_controller.Set_Temperature_In_K( temperature )
+		self.temp_controller.Turn_On()
+		self.temperature_graph.setpoint_temperature = temperature
+
+		self.setTemperature_pushButton.setText( "Stop Temperature" )
+		self.setTemperature_pushButton.setStyleSheet("QPushButton { background-color: rgba(0,255,0,255); color: rgba(0, 0, 0,255); }")
+		self.setTemperature_pushButton.clicked.connect( self.Stop_Set_Temperature )
+
+	def Stop_Set_Temperature( self ):
+		if self.temp_controller is not None:
+			self.temp_controller.Turn_Off()
+			self.temperature_graph.setpoint_temperature = None
+
+		self.setTemperature_pushButton.setText( "Hold Temperature" )
+		self.setTemperature_pushButton.setStyleSheet("QPushButton { background-color: rgba(255,0,0,255); color: rgba(0, 0, 0,255); }")
+		self.setTemperature_pushButton.clicked.connect( lambda : self.Start_Set_Temperature( toFloatOrNone(self.currentTemperature_lineEdit.text()) ) )
+
+	def Wait_For_Stable_Temp( self, temperature ):
+		self.temp_controller.Set_Temperature_In_K( temperature )
+		self.temp_controller.Turn_On()
+		self.temperature_graph.setpoint_temperature = temperature
+
+		while( not self.temp_controller.Temperature_Is_Stable() ):
+			QtCore.QCoreApplication.processEvents()
+			measurement_still_running = ( self.run_pushButton.text() == "Stop Measurement" )
+			if not measurement_still_running:
+				print( "Quitting measurment early" )
+				return False
+		print( "Temperature stable around: " + str(temperature) + '\n' )
+		return True
 
 	def Run_Measurment_Loop( self, sample_name, user, temperatures_to_measure, biases_to_measure ):
 		for temperature in temperatures_to_measure:
 			for bias in biases_to_measure:
 				self.omnic_controller.Set_Response_Function(
-					lambda file_name, file_contents :
-					Deal_With_FTIR_Data( file_contents, user, self.sql_conn,
-							sample_name, temperature, bias ) )
+					lambda file_name, file_contents, user=user, sample_name=sample_name, temperature_in_k=temperature, bias_in_v=bias :
+					Deal_With_FTIR_Data( file_contents, user, self.sql_conn, self.sql_type,
+						 sample_name, temperature_in_k, bias_in_v, self.omnic_controller.settings ) )
+					#Deal_With_FTIR_Data( file_contents, user, self.sql_conn, self.sql_type,
+					#		sample_name, temperature, bias ) )
 
 				if( temperature ): # None is ok, just means we don't know the temperature
-					self.temp_controller.Set_Temperature_In_K( temperature )
-					self.temp_controller.Turn_On()
-					self.temperature_graph.setpoint_temperature = temperature
-
-					while( not self.temp_controller.Temperature_Is_Stable() ):
-						QtCore.QCoreApplication.processEvents()
-						if( self.quit_early ):
-							print( "Quitting measurment early" )
-							self.Turn_Off_Temp()
-							self.omnic_controller.Set_Response_Function(
-								lambda file_name, file_contents : None )
-
-							self.quit_early = False
-							return
-					print( "Temperature stable around: " + str(temperature) + '\n' )
+					should_continue_measurement = self.Wait_For_Stable_Temp( temperature )
+					if not should_continue_measurement:
+						return
 
 				print( "Starting Measurement\n" )
 				self.omnic_controller.Measure_Sample( sample_name )
 
 				while( not self.omnic_controller.got_file_over_tcp ):
 					QtCore.QCoreApplication.processEvents()
-					#if( self.quit_early ):
-					#	self.Quitting_Early.emit()
-					#	return
+					#measurement_still_running = ( self.run_pushButton.text() == "Stop Measurement" )
+					#if not measurement_still_running:
+					#	print( "Quitting measurment early" )
+					#	return False
 
 				self.omnic_controller.got_file_over_tcp = False
 
-		self.Turn_Off_Temp()
-		self.omnic_controller.Set_Response_Function(
-			lambda file_name, file_contents : None )
-
-		print( "Finished Measurment" )
 		self.Stop_Measurment()
+		print( "Finished Measurment" )
 
 
-
-
-def Create_Table_If_Needed( sql_conn ):
+def Create_Table_If_Needed( sql_conn, sql_type ):
 	cur = sql_conn.cursor()
 	try:
-		cur.execute("""CREATE TABLE `ftir_measurements` ( `sample_name` TEXT NOT NULL, `time` DATETIME NOT NULL, `measurement_id` TEXT NOT NULL, `temperature_in_k` REAL, `bias_in_v` REAL )""")
+		if sql_type == "QSQLITE":
+			cur.execute("""CREATE TABLE `ftir_measurements` ( `sample_name`	TEXT NOT NULL, `time`	DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, `measurement_id`	TEXT NOT NULL, `temperature_in_k`	REAL, `bias_in_v`	REAL, `user`	TEXT, `detector`	TEXT, `beam_splitter`	TEXT, `start_wave_number`	REAL, `end_wave_number`	REAL, `number_of_scans`	INTEGER, `velocity`	REAL, `aperture`	REAL, `gain`	REAL );""")
+		else:
+			cur.execute("""CREATE TABLE `ftir_measurements` ( `sample_name`	TEXT NOT NULL, `time`	DATETIME NOT NULL, `measurement_id`	TEXT NOT NULL, `temperature_in_k`	REAL, `bias_in_v`	REAL, `user`	TEXT, `detector`	TEXT, `beam_splitter`	TEXT, `start_wave_number`	REAL, `end_wave_number`	REAL, `number_of_scans`	INTEGER, `velocity`	REAL, `aperture`	REAL, `gain`	REAL );""")
 	except (MySQLdb.Error, MySQLdb.Warning) as e:
 		pass
 		#print(e)
@@ -222,14 +252,14 @@ def Create_Table_If_Needed( sql_conn ):
 	cur.close()
 	return False
 
-def Deal_With_FTIR_Data( ftir_file_contents, user, sql_conn, sample_name, temperature_in_k, bias_in_v ):
+def Deal_With_FTIR_Data( ftir_file_contents, user, sql_conn, sql_type, sample_name, temperature_in_k, bias_in_v, settings ):
 	#output_command_file = open( './test_auto.csv', 'w' )
 	#output_command_file.write( file_contents )
 	#output_command_file.close()
 
 	wave_number = []
 	intensity = []
-	for line in re.split( '\n|\r', ftir_file_contents.decode() ):
+	for line in re.split( '\n|\r', ftir_file_contents.decode('utf8', 'ignore') ):
 		data_split = line.split(',')
 		if len( data_split ) < 2:
 			continue
@@ -240,10 +270,14 @@ def Deal_With_FTIR_Data( ftir_file_contents, user, sql_conn, sample_name, temper
 	#m.update( 'Test'.encode() )
 	m.update( (sample_name + str( datetime.now() ) + ','.join(intensity) ).encode() )
 	measurement_id = m.hexdigest()
-	meta_data_sql_string = '''INSERT INTO ftir_measurements(sample_name,user,measurement_id,temperature_in_k,bias_in_v,time) VALUES(%s,%s,%s,%s,%s,now())'''
-	data_sql_string = '''INSERT INTO raw_ftir_data(measurement_id,wavenumber,intensity) VALUES(%s,%s,%s)'''
+	if sql_type == 'QSQLITE':
+		meta_data_sql_string = '''INSERT INTO ftir_measurements(sample_name,user,measurement_id,temperature_in_k,bias_in_v,detector,beam_splitter,start_wave_number,end_wave_number,number_of_scans,velocity,aperture,gain) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)'''
+		data_sql_string = '''INSERT INTO raw_ftir_data(measurement_id,wavenumber,intensity) VALUES(?,?,?)'''
+	else:
+		meta_data_sql_string = '''INSERT INTO ftir_measurements(sample_name,user,measurement_id,temperature_in_k,bias_in_v,detector,beam_splitter,start_wave_number,end_wave_number,number_of_scans,velocity,aperture,gain,time) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,now())'''
+		data_sql_string = '''INSERT INTO raw_ftir_data(measurement_id,wavenumber,intensity) VALUES(%s,%s,%s)'''
 	cur = sql_conn.cursor()
-	cur.execute( meta_data_sql_string, (sample_name,user,measurement_id,temperature_in_k,bias_in_v) )
+	cur.execute( meta_data_sql_string, (sample_name,user,measurement_id,temperature_in_k,bias_in_v, settings["Detector"], settings["Beam Splitter"], settings["Start Wave Number"], settings["End Wave Number"], settings["Number of Scans"], settings["Velocity"], settings["Aperture"], settings["Gain"] ) )
 	cur.executemany( data_sql_string, zip([measurement_id for x in range(len(wave_number))],wave_number,intensity) )
 	sql_conn.commit()
 

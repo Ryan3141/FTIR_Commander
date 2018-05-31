@@ -250,6 +250,23 @@ color: rgb(255, 190, 37);</string>
             </property>
            </widget>
           </item>
+          <item>
+           <widget class="QLabel" name="label_9">
+            <property name="text">
+             <string>Temperature</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLineEdit" name="currentTemperature_lineEdit"/>
+          </item>
+          <item>
+           <widget class="QPushButton" name="setTemperature_pushButton">
+            <property name="text">
+             <string>Set Temperature</string>
+            </property>
+           </widget>
+          </item>
          </layout>
         </item>
        </layout>

@@ -40,8 +40,9 @@ class Omnic_Controller( QtCore.QObject ):
 		#print( message )
 
 	def ParseFile( self, file_name, file_contents ):
-		if file_name.lower() == "settings_file.exp":
+		if file_name.lower() == "settingsfile.exp" or file_name.lower() == "default.exp":
 			self.settings = Load_FTIR_Config( file_contents )
+			print( "Got FTIR Configuration File" )
 			return
 		self.response_function( file_name, file_contents )
 		self.got_file_over_tcp = True
@@ -68,6 +69,3 @@ class Omnic_Controller( QtCore.QObject ):
 	def Request_Settings( self ):
 		print( "Getting Settings" )
 		self.SendFile( "SaveSettingsFile.command" ) # Make sure the settings file is saved as settings_file.exp (case insensitive) to get it the right place
-
-	def ParseConfigFile( self ):
-		pass

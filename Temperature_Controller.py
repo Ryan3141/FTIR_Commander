@@ -1,8 +1,7 @@
 try:
 	import serial
 except:
-	print( 'Need to install PySerial, run: pip install PySerial' )
-	exit()
+	raise ImportError( 'Need to install PySerial, run: pip install PySerial' )
 
 import re
 import glob
@@ -24,9 +23,10 @@ class Temperature_Controller( QtCore.QObject ):
 		super().__init__( parent )
 		success = False
 		self.serial_connection = None
+		self.identifier_string = configuration_file['Temperature_Controller']['Listener_Type']
 
 		try:
-			self.device_communicator = Device_Communicator( parent, identifier_string=configuration_file['Temperature_Controller']['Listener_Type'], listener_address=None,
+			self.device_communicator = Device_Communicator( parent, identifier_string=self.identifier_string, listener_address=None,
 												  port=configuration_file['Temperature_Controller']['Listener_Port'] )
 			self.device_communicator.Poll_LocalIPs_For_Devices( configuration_file['Temperature_Controller']['ip_range'] )
 			success = True
@@ -50,7 +50,7 @@ class Temperature_Controller( QtCore.QObject ):
 		for port in GetAvailablePorts():
 			try:
 				self.serial_connection = serial.Serial(port, 115200, timeout=0)
-				self.Device_Connected.emit( str(port), "Serial" )
+				self.serial_port = port
 				return True
 			except:
 				pass
@@ -113,6 +113,7 @@ class Temperature_Controller( QtCore.QObject ):
 		return self.current_temperature
 
 	def ParseMessage( self, message ):
+		#print( message )
 		pattern = re.compile( r'Temperature = (-?\d+(\.\d+)?([eE][-+]?\d+?)?)' ) # Grab any properly formatted floating point number
 		debug_pattern = re.compile( r"Temperature setpoint changed to " );
 		m = pattern.match( message )
@@ -124,6 +125,9 @@ class Temperature_Controller( QtCore.QObject ):
 				self.past_temperatures = self.past_temperatures[-self.stable_temperature_sample_count:]
 		elif( debug_pattern.match( message ) ):
 			print( message )
+		elif( message.find( self.identifier_string ) != -1 ):
+			self.Device_Connected.emit( str(self.serial_port), "Serial" )
+
 
 	def Temperature_Is_Stable( self ):
 		if( len(self.past_temperatures) < self.stable_temperature_sample_count ):
