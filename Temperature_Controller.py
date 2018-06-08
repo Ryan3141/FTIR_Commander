@@ -34,6 +34,8 @@ class Temperature_Controller( QtCore.QObject ):
 			self.device_communicator.Device_Connected.connect( lambda peer_identifier : self.Device_Connected.emit( peer_identifier, "Wifi" ) )
 			self.device_communicator.Device_Disconnected.connect( lambda peer_identifier : self.Device_Disconnected.emit( peer_identifier, "Wifi" ) )
 
+			self.device_communicator.Device_Connected.connect( lambda peer_identifier : self.Set_PID() )
+
 		except:
 			self.device_communicator = None
 
@@ -45,6 +47,14 @@ class Temperature_Controller( QtCore.QObject ):
 		self.partial_serial_message = ""
 		self.past_temperatures = []
 		self.stable_temperature_sample_count = 20
+
+	def Set_PID( self ):
+		message = ("Set PID 50 20 200;\n")
+		if self.serial_connection is not None:
+			self.serial_connection.write( message.encode() )
+
+		self.device_communicator.Send_Command( message )
+
 
 	def Attempt_Serial_Connection( self ):
 		for port in GetAvailablePorts():
