@@ -32,7 +32,6 @@ class Graph(QChartView):
 		self.chart.setPlotAreaBackgroundVisible( True )
 
 		self.setpointTemperatureSeries = QLineSeries( self.chart )
-		self.setpointTemperatureSeries
 		pen = self.setpointTemperatureSeries.pen()
 		pen.setWidthF(2.)
 		pen.setColor( Qt.green )

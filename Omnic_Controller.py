@@ -3,8 +3,8 @@ import shutil
 import os
 from PyQt5 import QtCore
 
-from Device_Communicator import Device_Communicator
-from FTIR_Config_File import Load_FTIR_Config
+from .Device_Communicator import Device_Communicator
+from .FTIR_Config_File import Load_FTIR_Config
 
 class Omnic_Controller( QtCore.QObject ):
 	"""Interface with Omnic Windows NT Computer"""
@@ -53,7 +53,7 @@ class Omnic_Controller( QtCore.QObject ):
 			self.device_communicator.Poll_LocalIPs_For_Devices( self.ip_range )
 
 	def SendFile( self, file_path ):
-		file = open( file_path, 'r' )
+		file = open( file_path, 'rb' )
 		file_contents = file.read()
 		file.close()
 

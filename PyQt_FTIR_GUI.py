@@ -1,3 +1,7 @@
+if __name__ == "__main__": # This allows running this module by running this script
+	import sys
+	sys.path.insert(0, "..")
+
 from PyQt5 import QtNetwork, QtCore, QtGui, uic, QtWidgets
 import os
 import sys
@@ -5,20 +9,32 @@ import sqlite3
 try:
 	import MySQLdb
 except:
-	print( "Need to install mysql plugin, run: pip install mysqlclient")
-	exit()
+	raise ImportError( "Need to install mysql plugin, run: pip install mysqlclient")
+
 import hashlib
 from datetime import datetime
 import re
 import configparser
 
 import numpy as np
-from Temperature_Controller import Temperature_Controller
-from Omnic_Controller import Omnic_Controller
-from Graph import Graph
+from FTIR_Commander.Temperature_Controller import Temperature_Controller
+from FTIR_Commander.Omnic_Controller import Omnic_Controller
+from FTIR_Commander.Graph import Graph
+
+__version__ = '1.00'
+
+def resource_path(relative_path):  # Define function to import external files when using PyInstaller.
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
 
 
-qtCreatorFile = "PyQt_FTIR_GUI.ui" # GUI layout file.
+qtCreatorFile = resource_path(os.path.join("FTIR_Commander", "PyQt_FTIR_GUI.ui" )) # GUI layout file.
 
 Ui_MainWindow, QtBaseClass = uic.loadUiType(qtCreatorFile)
 
@@ -28,12 +44,12 @@ def toFloatOrNone( as_string ):
 	except:
 		return None
 
-class MyApp(QtWidgets.QMainWindow, Ui_MainWindow):
+class FtirCommanderWindow(QtWidgets.QWidget, Ui_MainWindow):
 
 	#Set_New_Temperature_K = QtCore.pyqtSignal(float)
 	#Turn_Off_Temperature_Control = QtCore.pyqtSignal(float)
-	def __init__(self):
-		QtWidgets.QMainWindow.__init__(self)
+	def __init__(self, parent=None, root_window=None):
+		QtWidgets.QWidget.__init__(self, parent)
 		Ui_MainWindow.__init__(self)
 		self.setupUi(self)
 
@@ -46,7 +62,7 @@ class MyApp(QtWidgets.QMainWindow, Ui_MainWindow):
 
 	def Init_Subsystems( self ):
 		config = configparser.ConfigParser()
-		config.read('configuration.ini')
+		config.read( resource_path(os.path.join("FTIR_Commander", "configuration.ini" ) ) )
 
 		self.Connect_To_SQL( config )
 		self.temp_controller = Temperature_Controller( config, parent=self )
@@ -113,7 +129,13 @@ class MyApp(QtWidgets.QMainWindow, Ui_MainWindow):
 			error.setText( e )
 			error.setWindowTitle( "Unable to connect to SQL Database" )
 			error.exec_()
-			print( e )
+			return
+		except MySQLdb.Error as e:
+			error = QtWidgets.QMessageBox()
+			error.setIcon( QtWidgets.QMessageBox.Critical )
+			error.setText( str(e) )
+			error.setWindowTitle( "Unable to connect to SQL Database" )
+			error.exec_()
 			return
 
 		Create_Table_If_Needed( self.sql_conn, self.sql_type )
@@ -284,7 +306,7 @@ def Deal_With_FTIR_Data( ftir_file_contents, user, sql_conn, sql_type, sample_na
 
 if __name__ == "__main__":
 	app = QtWidgets.QApplication(sys.argv)
-	window = MyApp()
+	window = FtirCommanderWindow()
 	window.show()
 	sys.exit(app.exec_())
 

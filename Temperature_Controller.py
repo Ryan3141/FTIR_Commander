@@ -11,7 +11,7 @@ from time import sleep
 
 from PyQt5 import QtCore
 
-from Device_Communicator import Device_Communicator
+from .Device_Communicator import Device_Communicator
 
 class Temperature_Controller( QtCore.QObject ):
 	"""Interface with serial com port to control temperature"""

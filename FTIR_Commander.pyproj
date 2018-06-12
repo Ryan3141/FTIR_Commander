@@ -7,10 +7,11 @@
     <StartupFile>PyQt_FTIR_GUI.py</StartupFile>
     <SearchPath>
     </SearchPath>
-    <WorkingDirectory>.</WorkingDirectory>
+    <WorkingDirectory>..</WorkingDirectory>
     <OutputPath>.</OutputPath>
     <Name>FTIR_Commander</Name>
     <RootNamespace>FTIR_Commander</RootNamespace>
+    <IsWindowsApplication>False</IsWindowsApplication>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
     <DebugSymbols>true</DebugSymbols>
@@ -33,6 +34,9 @@
     </Compile>
     <Compile Include="PyQt_FTIR_GUI.py" />
     <Compile Include="Temperature_Controller.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="__init__.py">
       <SubType>Code</SubType>
     </Compile>
   </ItemGroup>
