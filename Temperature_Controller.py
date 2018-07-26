@@ -13,6 +13,12 @@ from PyQt5 import QtCore
 
 from .Device_Communicator import Device_Communicator
 
+class Current_State:
+	def __init__( self ):
+		self.pid_is_on = False
+		self.set_temperature = 0
+		self.pid_settings = [50, 20, 200]
+
 class Temperature_Controller( QtCore.QObject ):
 	"""Interface with serial com port to control temperature"""
 	Temperature_Changed = QtCore.pyqtSignal(float)
@@ -21,20 +27,21 @@ class Temperature_Controller( QtCore.QObject ):
 
 	def __init__( self, configuration_file, parent=None ):
 		super().__init__( parent )
+		self.status = Current_State()
 		success = False
 		self.serial_connection = None
 		self.identifier_string = configuration_file['Temperature_Controller']['Listener_Type']
 
 		try:
 			self.device_communicator = Device_Communicator( parent, identifier_string=self.identifier_string, listener_address=None,
-												  port=configuration_file['Temperature_Controller']['Listener_Port'] )
+													port=configuration_file['Temperature_Controller']['Listener_Port'] )
 			self.device_communicator.Poll_LocalIPs_For_Devices( configuration_file['Temperature_Controller']['ip_range'] )
 			success = True
 			self.device_communicator.Reply_Recieved.connect( lambda message, device : self.ParseMessage( message ) )
 			self.device_communicator.Device_Connected.connect( lambda peer_identifier : self.Device_Connected.emit( peer_identifier, "Wifi" ) )
 			self.device_communicator.Device_Disconnected.connect( lambda peer_identifier : self.Device_Disconnected.emit( peer_identifier, "Wifi" ) )
 
-			self.device_communicator.Device_Connected.connect( lambda peer_identifier : self.Set_PID() )
+			self.device_communicator.Device_Connected.connect( lambda peer_identifier : self.Share_Current_State() )
 
 		except:
 			self.device_communicator = None
@@ -47,14 +54,22 @@ class Temperature_Controller( QtCore.QObject ):
 		self.partial_serial_message = ""
 		self.past_temperatures = []
 		self.stable_temperature_sample_count = 20
+		
+	def Share_Current_State( self ):
+		self.Set_Temperature_In_K( self.set_temperature )
+		self.SetPID( self.status.pid_settings )
+		if self.pid_is_on:
+			self.Turn_On()
+		else:
+			self.Turn_Off()
 
-	def Set_PID( self ):
-		message = ("Set PID 50 20 200;\n")
+	def Set_PID( self, pid_settings ):
+		self.status.pid_settings = pid_settings
+		message = ("Set PID {} {} {};\n".format( *pid_settings ) )
 		if self.serial_connection is not None:
 			self.serial_connection.write( message.encode() )
 
 		self.device_communicator.Send_Command( message )
-
 
 	def Attempt_Serial_Connection( self ):
 		for port in GetAvailablePorts():
@@ -95,6 +110,7 @@ class Temperature_Controller( QtCore.QObject ):
 
 	def Set_Temperature_In_K( self, temperature_in_k ):
 		print( "Setting output temperature to " + str(temperature_in_k) )
+		self.status.set_temperature = temperature_in_k
 		temperature_in_c = temperature_in_k - 273.15
 		self.setpoint_temperature = temperature_in_k
 		message = ("Set Temp " + str(temperature_in_c) + ";\n")
@@ -104,6 +120,7 @@ class Temperature_Controller( QtCore.QObject ):
 		self.device_communicator.Send_Command( message )
 
 	def Turn_On( self ):
+		self.status.pid_is_on = True
 		print( "Turning PID On" )
 		message = ("turn on;\n")
 		if self.serial_connection is not None:
@@ -112,6 +129,7 @@ class Temperature_Controller( QtCore.QObject ):
 		self.device_communicator.Send_Command( message )
 
 	def Turn_Off( self ):
+		self.status.pid_is_on = False
 		print( "Turning PID Off" )
 		message = ("turn off;\n")
 		if self.serial_connection is not None:
