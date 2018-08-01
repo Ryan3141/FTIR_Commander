@@ -56,9 +56,9 @@ class Temperature_Controller( QtCore.QObject ):
 		self.stable_temperature_sample_count = 20
 		
 	def Share_Current_State( self ):
-		self.Set_Temperature_In_K( self.set_temperature )
-		self.SetPID( self.status.pid_settings )
-		if self.pid_is_on:
+		self.Set_Temperature_In_K( self.status.set_temperature )
+		self.Set_PID( self.status.pid_settings )
+		if self.status.pid_is_on:
 			self.Turn_On()
 		else:
 			self.Turn_Off()
