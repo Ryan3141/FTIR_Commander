@@ -7,7 +7,7 @@
     <StartupFile>PyQt_FTIR_GUI.py</StartupFile>
     <SearchPath>
     </SearchPath>
-    <WorkingDirectory>..</WorkingDirectory>
+    <WorkingDirectory>.</WorkingDirectory>
     <OutputPath>.</OutputPath>
     <Name>FTIR_Commander</Name>
     <RootNamespace>FTIR_Commander</RootNamespace>

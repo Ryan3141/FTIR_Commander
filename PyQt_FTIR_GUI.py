@@ -23,18 +23,20 @@ from FTIR_Commander.Graph import Graph
 
 __version__ = '1.00'
 
+if __name__ == "__main__":
+	base_path = os.path.abspath(".")
+else:
+	try: # PyInstaller creates a temp folder and stores path in _MEIPASS
+		base_path = os.path.join( sys._MEIPASS, "FTIR_Commander" )
+	except Exception:
+		base_path = os.path.abspath( os.path.realpath(__file__) )
+
 def resource_path(relative_path):  # Define function to import external files when using PyInstaller.
     """ Get absolute path to resource, works for dev and for PyInstaller """
-    try:
-        # PyInstaller creates a temp folder and stores path in _MEIPASS
-        base_path = sys._MEIPASS
-    except Exception:
-        base_path = os.path.abspath(".")
-
     return os.path.join(base_path, relative_path)
 
 
-qtCreatorFile = resource_path(os.path.join("FTIR_Commander", "PyQt_FTIR_GUI.ui" )) # GUI layout file.
+qtCreatorFile = resource_path( "PyQt_FTIR_GUI.ui" ) # GUI layout file.
 
 Ui_MainWindow, QtBaseClass = uic.loadUiType(qtCreatorFile)
 
@@ -62,7 +64,7 @@ class FtirCommanderWindow(QtWidgets.QWidget, Ui_MainWindow):
 
 	def Init_Subsystems( self ):
 		config = configparser.ConfigParser()
-		config.read( resource_path(os.path.join("FTIR_Commander", "configuration.ini" ) ) )
+		config.read( resource_path( "configuration.ini" ) )
 
 		self.Connect_To_SQL( config )
 		self.temp_controller = Temperature_Controller( config, parent=self )
