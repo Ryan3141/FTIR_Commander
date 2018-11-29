@@ -37,10 +37,11 @@ class Device_Communicator( QtCore.QObject ):
 		self.tcp_server = QtNetwork.QTcpServer()
 		self.udp_socket = QtNetwork.QUdpSocket()
 		self.identifier_string = identifier_string
-		if not listener_address or listener_address == '':
-			listener_address = QtNetwork.QHostAddress.AnyIPv4
 		if( not self.Listen_For_Replies( listener_address ) ):
-			raise Exception( "Failed to find local network " + listener_address.toString() )
+			if listener_address is None:
+				raise Exception( "Failed to listen on default ip" )
+			else:
+				raise Exception( "Failed to listen on ip " + listener_address.toString() )
 
 
 	def No_Devices_Connected( self ):
@@ -48,7 +49,7 @@ class Device_Communicator( QtCore.QObject ):
 
 	def Poll_LocalIPs_For_Devices( self, ip_range ):
 		potential_ip_addresses = Convert_IP_Range_To_List( ip_range )
-		possible_duplicates = [key.split( ':' )[0] for key in self.active_connections.keys()]
+		possible_duplicates = [key.split( ':' )[:-1].join( ':' ) for key in self.active_connections.keys()]
 
 		for ip in [x for x in potential_ip_addresses if x not in possible_duplicates]:
 			self.udp_socket.writeDatagram( self.identifier_string.encode(), QtNetwork.QHostAddress(ip), self.port_for_ping )
@@ -69,7 +70,14 @@ class Device_Communicator( QtCore.QObject ):
 			QtCore.QTimer.singleShot( 1000, self, self.Keep_Retrying_TCP_Connection )
 
 	def Listen_For_Replies( self, ip_to_listen_on ):
-		result = self.tcp_server.listen( ip_to_listen_on, self.port_for_ping )
+		if not ip_to_listen_on or ip_to_listen_on == '':
+			# Keep trying until one of them works
+			result = ( self.tcp_server.listen( QtNetwork.QHostAddress.AnyIPv4, self.port_for_ping ) or
+				self.tcp_server.listen( QtNetwork.QHostAddress.AnyIPv6, self.port_for_ping ) or
+				self.tcp_server.listen( QtNetwork.QHostAddress.Any, self.port_for_ping ) )
+		else:
+			result = self.tcp_server.listen( ip_to_listen_on, self.port_for_ping )
+
 		if( not result ):
 			return False
 

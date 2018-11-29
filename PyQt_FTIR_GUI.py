@@ -15,6 +15,7 @@ import hashlib
 from datetime import datetime
 import re
 import configparser
+import numpy
 
 import numpy as np
 from FTIR_Commander.Temperature_Controller import Temperature_Controller
@@ -62,6 +63,7 @@ class FtirCommanderWindow(QtWidgets.QWidget, Ui_MainWindow):
 		self.temperature_graph.setContentsMargins(0, 0, 0, 0)
 
 
+
 	def Init_Subsystems( self ):
 		config = configparser.ConfigParser()
 		config.read( resource_path( "configuration.ini" ) )
@@ -69,20 +71,26 @@ class FtirCommanderWindow(QtWidgets.QWidget, Ui_MainWindow):
 		self.Connect_To_SQL( config )
 		self.temp_controller = Temperature_Controller( config, parent=self )
 		self.omnic_controller = Omnic_Controller( config, parent=self )
+
+		# Continuously recheck temperature controller
 		temp_controller_recheck_timer = QtCore.QTimer( self )
 		temp_controller_recheck_timer.timeout.connect( self.temp_controller.Update )
 		temp_controller_recheck_timer.start( 500 )
+
+		# Continuously recheck omnice (FTIR) controller
 		omnic_recheck_timer = QtCore.QTimer( self )
 		omnic_recheck_timer.timeout.connect( lambda : self.omnic_controller.Update() )
 		omnic_recheck_timer.start( 500 )
-		self.Temp_Controller_Disconnected()
-		self.Omnic_Disconnected()
+
+		self.Temp_Controller_Disconnected() # Initialize temperature controller to disconnected
+		self.Stop_Set_Temperature() # Initialize all heater settings to be off
+		self.Omnic_Disconnected() # Initialize omnic controller to disconnected
+
+		# Update labels on connection and disconnection to wifi devices
 		self.temp_controller.Device_Connected.connect( self.Temp_Controller_Connected )
 		self.temp_controller.Device_Disconnected.connect( self.Temp_Controller_Disconnected )
 		self.omnic_controller.Device_Connected.connect( self.Omnic_Connected )
 		self.omnic_controller.Device_Disconnected.connect( self.Omnic_Disconnected )
-		#self.setTemperature_pushButton.clicked.connect( lambda : self.Start_Set_Temperature( float(self.currentTemperature_lineEdit.text()) ) )
-		self.Stop_Set_Temperature()
 
 		user = config['Omnic_Communicator']['user']
 		if user:
@@ -107,9 +115,15 @@ class FtirCommanderWindow(QtWidgets.QWidget, Ui_MainWindow):
 
 	def Connect_Control_Logic( self ):
 		self.Stop_Measurment()
-		self.run_pushButton.clicked.connect( self.Start_Measurement )
+		#self.run_pushButton.clicked.connect( self.Start_Measurement )
+
+		#random_noise_timer = QtCore.QTimer( self )
+		#random_noise_timer.timeout.connect( lambda : self.Temperature_Update(numpy.random.uniform(low=280, high=300)) )
+		#random_noise_timer.start( 500 )
 
 		self.temp_controller.Temperature_Changed.connect( self.Temperature_Update )
+		self.temp_controller.PID_Output_Changed.connect( lambda pid_output : self.temperature_graph.add_new_pid_output_data_point( QtCore.QDateTime.currentDateTime(), pid_output ) )
+		self.temp_controller.PID_Output_Changed.connect( lambda pid_output : self.outputPower_lineEdit.setText( str( pid_output ) ) )
 
 	def Temperature_Update( self, temperature ):
 		#print( "Temp: " + str(QtCore.QDateTime.currentDateTime()) )
@@ -199,6 +213,8 @@ class FtirCommanderWindow(QtWidgets.QWidget, Ui_MainWindow):
 
 		self.setTemperature_pushButton.setText( "Stop Temperature" )
 		self.setTemperature_pushButton.setStyleSheet("QPushButton { background-color: rgba(0,255,0,255); color: rgba(0, 0, 0,255); }")
+		try: self.setTemperature_pushButton.clicked.disconnect() 
+		except Exception: pass
 		self.setTemperature_pushButton.clicked.connect( self.Stop_Set_Temperature )
 
 	def Stop_Set_Temperature( self ):
@@ -208,6 +224,8 @@ class FtirCommanderWindow(QtWidgets.QWidget, Ui_MainWindow):
 
 		self.setTemperature_pushButton.setText( "Hold Temperature" )
 		self.setTemperature_pushButton.setStyleSheet("QPushButton { background-color: rgba(255,0,0,255); color: rgba(0, 0, 0,255); }")
+		try: self.setTemperature_pushButton.clicked.disconnect() 
+		except Exception: pass
 		self.setTemperature_pushButton.clicked.connect( lambda : self.Start_Set_Temperature( toFloatOrNone(self.currentTemperature_lineEdit.text()) ) )
 
 	def Wait_For_Stable_Temp( self, temperature ):

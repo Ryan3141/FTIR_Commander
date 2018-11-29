@@ -22,6 +22,7 @@ class Current_State:
 class Temperature_Controller( QtCore.QObject ):
 	"""Interface with serial com port to control temperature"""
 	Temperature_Changed = QtCore.pyqtSignal(float)
+	PID_Output_Changed = QtCore.pyqtSignal(int)
 	Device_Connected = QtCore.pyqtSignal(str,str)
 	Device_Disconnected = QtCore.pyqtSignal(str,str)
 
@@ -142,18 +143,26 @@ class Temperature_Controller( QtCore.QObject ):
 
 	def ParseMessage( self, message ):
 		#print( message )
-		pattern = re.compile( r'Temperature = (-?\d+(\.\d+)?([eE][-+]?\d+?)?)' ) # Grab any properly formatted floating point number
 		debug_pattern = re.compile( r"Temperature setpoint changed to " );
-		m = pattern.match( message )
+
+		temperature_pattern = re.compile( r'Temperature = (-?\d+(\.\d+)?([eE][-+]?\d+?)?)' ) # Grab any properly formatted floating point number
+		m = temperature_pattern.match( message )
 		if( m ):
 			self.current_temperature = float( m.group( 1 ) ) + 273.15
 			self.Temperature_Changed.emit( self.current_temperature )
 			self.past_temperatures.append( self.current_temperature )
 			if( len(self.past_temperatures) > self.stable_temperature_sample_count ):
 				self.past_temperatures = self.past_temperatures[-self.stable_temperature_sample_count:]
-		elif( debug_pattern.match( message ) ):
+
+		pid_output_pattern = re.compile( r'PID Output:\s*(\d+)' ) # Grab any properly formatted floating point number
+		m2 = pid_output_pattern.search( message )
+		if( m2 ):
+			output_pid = int( m2.group( 1 ) )
+			self.PID_Output_Changed.emit( output_pid )
+
+		if( debug_pattern.match( message ) ):
 			print( message )
-		elif( message.find( self.identifier_string ) != -1 ):
+		if( message.find( self.identifier_string ) != -1 ):
 			self.Device_Connected.emit( str(self.serial_port), "Serial" )
 		else:
 			print( message )
