@@ -53,7 +53,7 @@ class Omnic_Controller( QtCore.QObject ):
 			self.device_communicator.Poll_LocalIPs_For_Devices( self.ip_range )
 
 	def SendFile( self, file_path ):
-		file = open( file_path, 'rb' )
+		file = open( file_path, 'r' )
 		file_contents = file.read()
 		file.close()
 

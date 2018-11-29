@@ -8,6 +8,7 @@ Text SettingsFile
 Tab 2
 Enter
 MouseLClick 738 558
+MouseLClick 725 546
 #WaitFor Experiment Setup - E:\ExportData\Output\SettingsFile.exp
 # Click on Ok button
 MouseLClick 458 715

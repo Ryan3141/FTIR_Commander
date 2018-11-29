@@ -17,7 +17,7 @@ class Current_State:
 	def __init__( self ):
 		self.pid_is_on = False
 		self.set_temperature = 0
-		self.pid_settings = [50, 20, 200]
+		self.pid_settings = [100, 10, 0]
 
 class Temperature_Controller( QtCore.QObject ):
 	"""Interface with serial com port to control temperature"""
@@ -53,7 +53,7 @@ class Temperature_Controller( QtCore.QObject ):
 		self.setpoint_temperature = None
 		self.partial_serial_message = ""
 		self.past_temperatures = []
-		self.stable_temperature_sample_count = 20
+		self.stable_temperature_sample_count = 100
 		
 	def Share_Current_State( self ):
 		self.Set_Temperature_In_K( self.status.set_temperature )
@@ -155,18 +155,24 @@ class Temperature_Controller( QtCore.QObject ):
 			print( message )
 		elif( message.find( self.identifier_string ) != -1 ):
 			self.Device_Connected.emit( str(self.serial_port), "Serial" )
+		else:
+			print( message )
 
 
 	def Temperature_Is_Stable( self ):
 		if( len(self.past_temperatures) < self.stable_temperature_sample_count ):
 			return False
 		error = np.array( self.past_temperatures ) - self.setpoint_temperature
-		deviation = np.std( error )
-		average_error = np.mean( error )
-		if( abs(average_error) < .5 and deviation < 0.2 ):
-			return True
-		else:
+		if np.amax( np.fabs( error ) ) > 1:
 			return False
+		else:
+			return True
+#		deviation = np.std( error )
+#		average_error = np.mean( error )
+#		if( abs(average_error) < .5 and deviation < 0.2 ):
+#			return True
+#		else:
+#			return False
 
 # Function from: https://stackoverflow.com/questions/12090503/listing-available-com-ports-with-python/14224477#14224477
 def GetAvailablePorts():
