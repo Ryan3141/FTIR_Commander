@@ -27,13 +27,7 @@ from FTIR_Commander.Graph import Graph
 
 __version__ = '1.00'
 
-if __name__ == "__main__":
-	base_path = os.path.abspath(".")
-else:
-	try: # PyInstaller creates a temp folder and stores path in _MEIPASS
-		base_path = os.path.join( sys._MEIPASS, "FTIR_Commander" )
-	except Exception:
-		base_path = os.path.abspath( os.path.realpath(__file__) )
+base_path = os.path.dirname( os.path.realpath(__file__) )
 
 def resource_path(relative_path):  # Define function to import external files when using PyInstaller.
     """ Get absolute path to resource, works for dev and for PyInstaller """
