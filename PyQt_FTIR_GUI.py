@@ -6,10 +6,13 @@ from PyQt5 import QtNetwork, QtCore, QtGui, uic, QtWidgets
 import os
 import sys
 import sqlite3
+
+from FTIR_Commander.Install_If_Necessary import Ask_For_Install
 try:
-	import MySQLdb
+	import mysql.connector
 except:
-	raise ImportError( "Need to install mysql plugin, run: pip install mysqlclient")
+	Ask_For_Install( "mysql-connector-python" )
+	import mysql.connector
 
 import hashlib
 from datetime import datetime
@@ -77,7 +80,7 @@ class FtirCommanderWindow(QtWidgets.QWidget, Ui_MainWindow):
 		temp_controller_recheck_timer.timeout.connect( self.temp_controller.Update )
 		temp_controller_recheck_timer.start( 500 )
 
-		# Continuously recheck omnice (FTIR) controller
+		# Continuously recheck omnic (FTIR) controller
 		omnic_recheck_timer = QtCore.QTimer( self )
 		omnic_recheck_timer.timeout.connect( lambda : self.omnic_controller.Update() )
 		omnic_recheck_timer.start( 500 )
@@ -123,19 +126,22 @@ class FtirCommanderWindow(QtWidgets.QWidget, Ui_MainWindow):
 
 		self.temp_controller.Temperature_Changed.connect( self.Temperature_Update )
 		self.temp_controller.PID_Output_Changed.connect( lambda pid_output : self.temperature_graph.add_new_pid_output_data_point( QtCore.QDateTime.currentDateTime(), pid_output ) )
-		self.temp_controller.PID_Output_Changed.connect( lambda pid_output : self.outputPower_lineEdit.setText( str( pid_output ) ) )
+		self.temp_controller.PID_Output_Changed.connect( lambda pid_output : self.outputPower_lineEdit.setText( '{:.2f}'.format( pid_output ) ) )
+		self.temp_controller.Setpoint_Changed.connect( lambda setpoint : self.setpoint_lineEdit.setText( '{:.2f}'.format( setpoint ) ) )
 
 	def Temperature_Update( self, temperature ):
 		#print( "Temp: " + str(QtCore.QDateTime.currentDateTime()) )
 		#print( "Temp: " + str(temperature) )
 		self.temperature_graph.add_new_data_point( QtCore.QDateTime.currentDateTime(), temperature )
+		self.currentTemperature_lineEdit_2.setText( '{:.2f}'.format( temperature ) )
+
 
 	def Connect_To_SQL( self, configuration_file ):
 		try:
 			if configuration_file['SQL_Server']['database_type'] == "QSQLITE":
 				self.sql_conn = sqlite3.connect( configuration_file['SQL_Server']['database_name'] )
 			elif configuration_file['SQL_Server']['database_type'] == "QMYSQL":
-				self.sql_conn = MySQLdb.connect(host=configuration_file['SQL_Server']['host_location'],db=configuration_file['SQL_Server']['database_name'],
+				self.sql_conn = mysql.connector.connect(host=configuration_file['SQL_Server']['host_location'],db=configuration_file['SQL_Server']['database_name'],
 									user=configuration_file['SQL_Server']['username'],passwd=configuration_file['SQL_Server']['password'])
 				self.sql_conn.ping( True ) # Maintain connection to avoid timing out
 			self.sql_type = configuration_file['SQL_Server']['database_type']
@@ -146,7 +152,7 @@ class FtirCommanderWindow(QtWidgets.QWidget, Ui_MainWindow):
 			error.setWindowTitle( "Unable to connect to SQL Database" )
 			error.exec_()
 			return
-		except MySQLdb.Error as e:
+		except mysql.connector.Error as e:
 			error = QtWidgets.QMessageBox()
 			error.setIcon( QtWidgets.QMessageBox.Critical )
 			error.setText( str(e) )
@@ -280,7 +286,7 @@ def Create_Table_If_Needed( sql_conn, sql_type ):
 			cur.execute("""CREATE TABLE `ftir_measurements` ( `sample_name`	TEXT NOT NULL, `time`	DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, `measurement_id`	TEXT NOT NULL, `temperature_in_k`	REAL, `bias_in_v`	REAL, `user`	TEXT, `detector`	TEXT, `beam_splitter`	TEXT, `start_wave_number`	REAL, `end_wave_number`	REAL, `number_of_scans`	INTEGER, `velocity`	REAL, `aperture`	REAL, `gain`	REAL );""")
 		else:
 			cur.execute("""CREATE TABLE `ftir_measurements` ( `sample_name`	TEXT NOT NULL, `time`	DATETIME NOT NULL, `measurement_id`	TEXT NOT NULL, `temperature_in_k`	REAL, `bias_in_v`	REAL, `user`	TEXT, `detector`	TEXT, `beam_splitter`	TEXT, `start_wave_number`	REAL, `end_wave_number`	REAL, `number_of_scans`	INTEGER, `velocity`	REAL, `aperture`	REAL, `gain`	REAL );""")
-	except (MySQLdb.Error, MySQLdb.Warning) as e:
+	except (mysql.connector.Error, mysql.connector.Warning) as e:
 		pass
 		#print(e)
 	except:
@@ -305,8 +311,8 @@ def Deal_With_FTIR_Data( ftir_file_contents, user, sql_conn, sql_type, sample_na
 		data_split = line.split(',')
 		if len( data_split ) < 2:
 			continue
-		wave_number.append( data_split[0] )
-		intensity.append( data_split[1] )
+		wave_number.append( float(data_split[0]) )
+		intensity.append( float(data_split[1]) )
 
 	m = hashlib.sha256()
 	#m.update( 'Test'.encode() )
@@ -320,7 +326,7 @@ def Deal_With_FTIR_Data( ftir_file_contents, user, sql_conn, sql_type, sample_na
 		data_sql_string = '''INSERT INTO raw_ftir_data(measurement_id,wavenumber,intensity) VALUES(%s,%s,%s)'''
 	cur = sql_conn.cursor()
 	cur.execute( meta_data_sql_string, (sample_name,user,measurement_id,temperature_in_k,bias_in_v, settings["Detector"], settings["Beam Splitter"], settings["Start Wave Number"], settings["End Wave Number"], settings["Number of Scans"], settings["Velocity"], settings["Aperture"], settings["Gain"] ) )
-	cur.executemany( data_sql_string, zip([measurement_id for x in range(len(wave_number))],wave_number,intensity) )
+	cur.executemany( data_sql_string, zip([int(measurement_id)] * len(wave_number), wave_number, intensity) )
 	sql_conn.commit()
 
 

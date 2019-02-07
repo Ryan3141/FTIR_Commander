@@ -29,6 +29,9 @@
     <Compile Include="Graph.py">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="Install_If_Necessary.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="Omnic_Controller.py">
       <SubType>Code</SubType>
     </Compile>

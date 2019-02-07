@@ -1,7 +1,9 @@
+from FTIR_Commander.Install_If_Necessary import Ask_For_Install
 try:
 	import serial
 except:
-	raise ImportError( 'Need to install PySerial, run: pip install PySerial' )
+	Ask_For_Install( "PySerial" )
+	import serial
 
 import re
 import glob
@@ -22,7 +24,8 @@ class Current_State:
 class Temperature_Controller( QtCore.QObject ):
 	"""Interface with serial com port to control temperature"""
 	Temperature_Changed = QtCore.pyqtSignal(float)
-	PID_Output_Changed = QtCore.pyqtSignal(int)
+	PID_Output_Changed = QtCore.pyqtSignal(float)
+	Setpoint_Changed = QtCore.pyqtSignal(float)
 	Device_Connected = QtCore.pyqtSignal(str,str)
 	Device_Disconnected = QtCore.pyqtSignal(str,str)
 
@@ -89,7 +92,7 @@ class Temperature_Controller( QtCore.QObject ):
 			if not self.serial_connection:
 				self.Attempt_Serial_Connection()
 
-		if self.serial_connection is not None:
+		if False: #self.serial_connection is not None:
 			if not self.device_communicator.No_Devices_Connected():
 				self.serial_connection.close()
 				self.serial_connection = None
@@ -145,7 +148,7 @@ class Temperature_Controller( QtCore.QObject ):
 		#print( message )
 		debug_pattern = re.compile( r"Temperature setpoint changed to " );
 
-		temperature_pattern = re.compile( r'Temperature = (-?\d+(\.\d+)?([eE][-+]?\d+?)?)' ) # Grab any properly formatted floating point number
+		temperature_pattern = re.compile( r'Temperature = ([+-]?\d+(\.\d+)?([eE][-+]?\d+?)?)' ) # Grab any properly formatted floating point number
 		m = temperature_pattern.match( message )
 		if( m ):
 			self.current_temperature = float( m.group( 1 ) ) + 273.15
@@ -154,18 +157,27 @@ class Temperature_Controller( QtCore.QObject ):
 			if( len(self.past_temperatures) > self.stable_temperature_sample_count ):
 				self.past_temperatures = self.past_temperatures[-self.stable_temperature_sample_count:]
 
-		pid_output_pattern = re.compile( r'PID Output:\s*(\d+)' ) # Grab any properly formatted floating point number
+		pid_output_pattern = re.compile( r'PID Output:\s*([+-]?\d+(\.\d+)?([eE][-+]?\d+?)?)' ) # Grab any properly formatted floating point number
 		m2 = pid_output_pattern.search( message )
 		if( m2 ):
-			output_pid = int( m2.group( 1 ) )
+			output_pid = float( m2.group( 1 ) )
 			self.PID_Output_Changed.emit( output_pid )
+
+		setpoint_pattern = re.compile( r'Setpoint:\s*([+-]?\d+(\.\d+)?([eE][-+]?\d+?)?)' ) # Grab any properly formatted floating point number
+		m3 = setpoint_pattern.search( message )
+		if( m3 ):
+			setpoint = float( m3.group( 1 ) ) + 273.15
+			self.Setpoint_Changed.emit( setpoint )
 
 		if( debug_pattern.match( message ) ):
 			print( message )
 		if( message.find( self.identifier_string ) != -1 ):
 			self.Device_Connected.emit( str(self.serial_port), "Serial" )
-		else:
-			print( message )
+
+		if( message.find( "Turning output off" ) != -1 ):
+			self.Setpoint_Changed.emit( 0.0 )
+		#else:
+		#	print( message )
 
 
 	def Temperature_Is_Stable( self ):

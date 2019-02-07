@@ -36,7 +36,7 @@ color: rgb(255, 190, 37);</string>
      </property>
      <widget class="QFrame" name="Upper_Frame">
       <property name="sizePolicy">
-       <sizepolicy hsizetype="Preferred" vsizetype="Minimum">
+       <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
         <horstretch>0</horstretch>
         <verstretch>0</verstretch>
        </sizepolicy>
@@ -44,7 +44,7 @@ color: rgb(255, 190, 37);</string>
       <property name="maximumSize">
        <size>
         <width>16777215</width>
-        <height>250</height>
+        <height>200</height>
        </size>
       </property>
       <property name="baseSize">
@@ -74,6 +74,9 @@ color: rgb(255, 190, 37);</string>
        </property>
        <item>
         <layout class="QVBoxLayout" name="verticalLayout_9" stretch="0,0,0">
+         <property name="sizeConstraint">
+          <enum>QLayout::SetMinimumSize</enum>
+         </property>
          <item>
           <layout class="QVBoxLayout" name="verticalLayout_8">
            <item>
@@ -628,6 +631,9 @@ border-color: rgb(0, 1, 71);</string>
               <width>16777215</width>
               <height>16777215</height>
              </size>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">color: rgb(0, 0, 255);</string>
             </property>
             <property name="text">
              <string>Output Power</string>
