@@ -22,23 +22,16 @@
     <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="Device_Communicator.py" />
     <Compile Include="FTIR_Config_File.py">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="Graph.py">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="Install_If_Necessary.py">
-      <SubType>Code</SubType>
-    </Compile>
     <Compile Include="Omnic_Controller.py">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="PyQt_FTIR_GUI.py" />
-    <Compile Include="Temperature_Controller.py">
-      <SubType>Code</SubType>
-    </Compile>
     <Compile Include="__init__.py">
       <SubType>Code</SubType>
     </Compile>

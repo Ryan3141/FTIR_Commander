@@ -8,7 +8,7 @@ Simple example illustrating Qt Charts capabilities to plot curves with
 a high number of points, using OpenGL accelerated series
 """
 
-from FTIR_Commander.Install_If_Necessary import Ask_For_Install
+from MPL_Shared.Install_If_Necessary import Ask_For_Install
 try:
 	from PyQt5.QtChart import QChart, QChartView, QLineSeries, QDateTimeAxis, QValueAxis
 except:

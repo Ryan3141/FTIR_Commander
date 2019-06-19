@@ -5,25 +5,19 @@ if __name__ == "__main__": # This allows running this module by running this scr
 from PyQt5 import QtNetwork, QtCore, QtGui, uic, QtWidgets
 import os
 import sys
-import sqlite3
 
-from FTIR_Commander.Install_If_Necessary import Ask_For_Install
-try:
-	import mysql.connector
-except:
-	Ask_For_Install( "mysql-connector-python" )
-	import mysql.connector
-
-import hashlib
+#import hashlib
 from datetime import datetime
 import re
-import configparser
-import numpy
-
 import numpy as np
-from FTIR_Commander.Temperature_Controller import Temperature_Controller
+import configparser
+
 from FTIR_Commander.Omnic_Controller import Omnic_Controller
 from FTIR_Commander.Graph import Graph
+
+from MPL_Shared.Temperature_Controller import Temperature_Controller
+from MPL_Shared.SQL_Controller import Commit_XY_Data_To_SQL, Connect_To_SQL
+from MPL_Shared.Temperature_Controller_Settings import TemperatureControllerSettingsWindow
 
 __version__ = '1.00'
 
@@ -44,6 +38,8 @@ def toFloatOrNone( as_string ):
 	except:
 		return None
 
+
+
 class FtirCommanderWindow(QtWidgets.QWidget, Ui_MainWindow):
 
 	#Set_New_Temperature_K = QtCore.pyqtSignal(float)
@@ -53,26 +49,32 @@ class FtirCommanderWindow(QtWidgets.QWidget, Ui_MainWindow):
 		Ui_MainWindow.__init__(self)
 		self.setupUi(self)
 
+		self.config_window = TemperatureControllerSettingsWindow()
+
 		self.Init_Subsystems()
 		self.Connect_Control_Logic()
 
 		self.temperature_graph.set_title("Measured Temperature Next To Sample")
 		self.temperature_graph.setContentsMargins(0, 0, 0, 0)
 
+	def PID_Coefficients_Updated( self, pid_coefficients ):
+		pass
+
 
 
 	def Init_Subsystems( self ):
+		self.sql_type, self.sql_conn = Connect_To_SQL( resource_path( "configuration.ini" ) )
+		#Create_Table_If_Needed( self.sql_conn, self.sql_type )
+
 		config = configparser.ConfigParser()
 		config.read( resource_path( "configuration.ini" ) )
-
-		self.Connect_To_SQL( config )
 		self.temp_controller = Temperature_Controller( config, parent=self )
 		self.omnic_controller = Omnic_Controller( config, parent=self )
 
 		# Continuously recheck temperature controller
 		temp_controller_recheck_timer = QtCore.QTimer( self )
 		temp_controller_recheck_timer.timeout.connect( self.temp_controller.Update )
-		temp_controller_recheck_timer.start( 500 )
+		temp_controller_recheck_timer.start( 1000 )
 
 		# Continuously recheck omnic (FTIR) controller
 		omnic_recheck_timer = QtCore.QTimer( self )
@@ -88,6 +90,14 @@ class FtirCommanderWindow(QtWidgets.QWidget, Ui_MainWindow):
 		self.temp_controller.Device_Disconnected.connect( self.Temp_Controller_Disconnected )
 		self.omnic_controller.Device_Connected.connect( self.Omnic_Connected )
 		self.omnic_controller.Device_Disconnected.connect( self.Omnic_Disconnected )
+
+		# Run Connection to IV measurement system in another thread
+		#self.iv_controller = IV_Controller()
+		#self.iv_controller_thread = QtCore.QThread()
+		#self.iv_controller.moveToThread( self.iv_controller_thread )
+		#self.iv_controller_thread.started.connect( self.iv_controller.run )
+
+		#self.iv_controller_thread.start()
 
 		user = config['Omnic_Communicator']['user']
 		if user:
@@ -118,43 +128,14 @@ class FtirCommanderWindow(QtWidgets.QWidget, Ui_MainWindow):
 		#random_noise_timer.timeout.connect( lambda : self.Temperature_Update(numpy.random.uniform(low=280, high=300)) )
 		#random_noise_timer.start( 500 )
 
-		self.temp_controller.Temperature_Changed.connect( self.Temperature_Update )
+		self.temp_controller.Temperature_Changed.connect( lambda temperature : self.temperature_graph.add_new_data_point( QtCore.QDateTime.currentDateTime(), temperature ) )
+		self.temp_controller.Temperature_Changed.connect( lambda temperature : self.currentTemperature_lineEdit_2.setText( '{:.2f} K'.format( temperature ) ) )
 		self.temp_controller.PID_Output_Changed.connect( lambda pid_output : self.temperature_graph.add_new_pid_output_data_point( QtCore.QDateTime.currentDateTime(), pid_output ) )
-		self.temp_controller.PID_Output_Changed.connect( lambda pid_output : self.outputPower_lineEdit.setText( '{:.2f}'.format( pid_output ) ) )
-		self.temp_controller.Setpoint_Changed.connect( lambda setpoint : self.setpoint_lineEdit.setText( '{:.2f}'.format( setpoint ) ) )
+		self.temp_controller.PID_Output_Changed.connect( lambda pid_output : self.outputPower_lineEdit.setText( '{:.2f} %'.format( pid_output ) ) )
+		self.temp_controller.Setpoint_Changed.connect( lambda setpoint : self.setpoint_lineEdit.setText( '{:.2f} K'.format( setpoint ) ) )
 
-	def Temperature_Update( self, temperature ):
-		#print( "Temp: " + str(QtCore.QDateTime.currentDateTime()) )
-		#print( "Temp: " + str(temperature) )
-		self.temperature_graph.add_new_data_point( QtCore.QDateTime.currentDateTime(), temperature )
-		self.currentTemperature_lineEdit_2.setText( '{:.2f}'.format( temperature ) )
-
-
-	def Connect_To_SQL( self, configuration_file ):
-		try:
-			if configuration_file['SQL_Server']['database_type'] == "QSQLITE":
-				self.sql_conn = sqlite3.connect( configuration_file['SQL_Server']['database_name'] )
-			elif configuration_file['SQL_Server']['database_type'] == "QMYSQL":
-				self.sql_conn = mysql.connector.connect(host=configuration_file['SQL_Server']['host_location'],db=configuration_file['SQL_Server']['database_name'],
-									user=configuration_file['SQL_Server']['username'],passwd=configuration_file['SQL_Server']['password'])
-				self.sql_conn.ping( True ) # Maintain connection to avoid timing out
-			self.sql_type = configuration_file['SQL_Server']['database_type']
-		except sqlite3.Error as e:
-			error = QtWidgets.QMessageBox()
-			error.setIcon( QtWidgets.QMessageBox.Critical )
-			error.setText( e )
-			error.setWindowTitle( "Unable to connect to SQL Database" )
-			error.exec_()
-			return
-		except mysql.connector.Error as e:
-			error = QtWidgets.QMessageBox()
-			error.setIcon( QtWidgets.QMessageBox.Critical )
-			error.setText( str(e) )
-			error.setWindowTitle( "Unable to connect to SQL Database" )
-			error.exec_()
-			return
-
-		Create_Table_If_Needed( self.sql_conn, self.sql_type )
+		self.config_window.Connect_Functions( self.temp_controller )
+		self.settings_pushButton.clicked.connect( lambda : self.config_window.show() )
 
 
 	def Start_Measurement( self ):
@@ -273,32 +254,28 @@ class FtirCommanderWindow(QtWidgets.QWidget, Ui_MainWindow):
 		print( "Finished Measurment" )
 
 
-def Create_Table_If_Needed( sql_conn, sql_type ):
-	cur = sql_conn.cursor()
-	try:
-		if sql_type == "QSQLITE":
-			cur.execute("""CREATE TABLE `ftir_measurements` ( `sample_name`	TEXT NOT NULL, `time`	DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, `measurement_id`	TEXT NOT NULL, `temperature_in_k`	REAL, `bias_in_v`	REAL, `user`	TEXT, `detector`	TEXT, `beam_splitter`	TEXT, `start_wave_number`	REAL, `end_wave_number`	REAL, `number_of_scans`	INTEGER, `velocity`	REAL, `aperture`	REAL, `gain`	REAL );""")
-		else:
-			cur.execute("""CREATE TABLE `ftir_measurements` ( `sample_name`	TEXT NOT NULL, `time`	DATETIME NOT NULL, `measurement_id`	TEXT NOT NULL, `temperature_in_k`	REAL, `bias_in_v`	REAL, `user`	TEXT, `detector`	TEXT, `beam_splitter`	TEXT, `start_wave_number`	REAL, `end_wave_number`	REAL, `number_of_scans`	INTEGER, `velocity`	REAL, `aperture`	REAL, `gain`	REAL );""")
-	except (mysql.connector.Error, mysql.connector.Warning) as e:
-		pass
-		#print(e)
-	except:
-		pass # Will cause exception if they already exist, but that's fine since we are just trying to make sure they exist
+#def Create_Table_If_Needed( sql_conn, sql_type ):
+#	cur = sql_conn.cursor()
+#	try:
+#		if sql_type == "QSQLITE":
+#			cur.execute("""CREATE TABLE `ftir_measurements` ( `sample_name`	TEXT NOT NULL, `time`	DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, `measurement_id`	TEXT NOT NULL, `temperature_in_k`	REAL, `bias_in_v`	REAL, `user`	TEXT, `detector`	TEXT, `beam_splitter`	TEXT, `start_wave_number`	REAL, `end_wave_number`	REAL, `number_of_scans`	INTEGER, `velocity`	REAL, `aperture`	REAL, `gain`	REAL );""")
+#		else:
+#			cur.execute("""CREATE TABLE `ftir_measurements` ( `sample_name`	TEXT NOT NULL, `time`	DATETIME NOT NULL, `measurement_id`	TEXT NOT NULL, `temperature_in_k`	REAL, `bias_in_v`	REAL, `user`	TEXT, `detector`	TEXT, `beam_splitter`	TEXT, `start_wave_number`	REAL, `end_wave_number`	REAL, `number_of_scans`	INTEGER, `velocity`	REAL, `aperture`	REAL, `gain`	REAL );""")
+#	except (mysql.connector.Error, mysql.connector.Warning) as e:
+#		pass
+#		#print(e)
+#	except:
+#		pass # Will cause exception if they already exist, but that's fine since we are just trying to make sure they exist
 
-	try:
-		cur.execute("""CREATE TABLE `raw_ftir_data` ( `measurement_id` TEXT NOT NULL, `wavenumber` REAL NOT NULL, `intensity` REAL NOT NULL );""")
-	except:
-		pass # Will cause exception if they already exist, but that's fine since we are just trying to make sure they exist
+#	try:
+#		cur.execute("""CREATE TABLE `raw_ftir_data` ( `measurement_id` TEXT NOT NULL, `wavenumber` REAL NOT NULL, `intensity` REAL NOT NULL );""")
+#	except:
+#		pass # Will cause exception if they already exist, but that's fine since we are just trying to make sure they exist
 
-	cur.close()
-	return False
+#	cur.close()
+#	return False
 
 def Deal_With_FTIR_Data( ftir_file_contents, user, sql_conn, sql_type, sample_name, temperature_in_k, bias_in_v, settings ):
-	#output_command_file = open( './test_auto.csv', 'w' )
-	#output_command_file.write( file_contents )
-	#output_command_file.close()
-
 	wave_number = []
 	intensity = []
 	for line in re.split( '\n|\r', ftir_file_contents.decode('utf8', 'ignore') ):
@@ -308,25 +285,25 @@ def Deal_With_FTIR_Data( ftir_file_contents, user, sql_conn, sql_type, sample_na
 		wave_number.append( float(data_split[0]) )
 		intensity.append( float(data_split[1]) )
 
-	m = hashlib.sha256()
-	#m.update( 'Test'.encode() )
-	m.update( (sample_name + str( datetime.now() ) + ','.join(intensity) ).encode() )
-	measurement_id = m.hexdigest()
-	if sql_type == 'QSQLITE':
-		meta_data_sql_string = '''INSERT INTO ftir_measurements(sample_name,user,measurement_id,temperature_in_k,bias_in_v,detector,beam_splitter,start_wave_number,end_wave_number,number_of_scans,velocity,aperture,gain) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)'''
-		data_sql_string = '''INSERT INTO raw_ftir_data(measurement_id,wavenumber,intensity) VALUES(?,?,?)'''
-	else:
-		meta_data_sql_string = '''INSERT INTO ftir_measurements(sample_name,user,measurement_id,temperature_in_k,bias_in_v,detector,beam_splitter,start_wave_number,end_wave_number,number_of_scans,velocity,aperture,gain,time) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,now())'''
-		data_sql_string = '''INSERT INTO raw_ftir_data(measurement_id,wavenumber,intensity) VALUES(%s,%s,%s)'''
-	cur = sql_conn.cursor()
-	cur.execute( meta_data_sql_string, (sample_name,user,measurement_id,temperature_in_k,bias_in_v, settings["Detector"], settings["Beam Splitter"], settings["Start Wave Number"], settings["End Wave Number"], settings["Number of Scans"], settings["Velocity"], settings["Aperture"], settings["Gain"] ) )
-	cur.executemany( data_sql_string, zip([int(measurement_id)] * len(wave_number), wave_number, intensity) )
-	sql_conn.commit()
+
+	#m = hashlib.sha256()
+	##m.update( 'Test'.encode() )
+	#m.update( (sample_name + str( datetime.now() ) + ','.join(intensity) ).encode() )
+	#measurement_id = m.hexdigest()
+
+	meta_data_sql_entries = dict( sample_name=sample_name, user=user, temperature_in_k=temperature_in_k, bias_in_v=bias_in_v,
+				 detector=settings["Detector"], beam_splitter=settings["Beam Splitter"], start_wave_number=settings["Start Wave Number"],
+				 end_wave_number=settings["End Wave Number"], number_of_scans=settings["Number of Scans"], velocity=settings["Velocity"],
+				 aperture=settings["Aperture"], gain=settings["Gain"] )
+
+	Commit_XY_Data_To_SQL( sql_type, sql_conn, xy_data_sql_table="ftir_raw_data", xy_sql_labels=("wavenumber","intensity"),
+					   x_data=wave_number, y_data=intensity, metadata_sql_table="ftir_measurements", **meta_data_sql_entries )
 
 
 if __name__ == "__main__":
 	app = QtWidgets.QApplication(sys.argv)
 	window = FtirCommanderWindow()
 	window.show()
-	sys.exit(app.exec_())
+	#sys.exit(app.exec_())
+	app.exec_()
 

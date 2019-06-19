@@ -3,7 +3,7 @@ import shutil
 import os
 from PyQt5 import QtCore
 
-from .Device_Communicator import Device_Communicator
+from MPL_Shared.Device_Communicator import Device_Communicator
 from .FTIR_Config_File import Load_FTIR_Config
 
 class Omnic_Controller( QtCore.QObject ):
