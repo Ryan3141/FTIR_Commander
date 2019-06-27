@@ -74,7 +74,7 @@ class FtirCommanderWindow(QtWidgets.QWidget, Ui_MainWindow):
 		# Continuously recheck temperature controller
 		temp_controller_recheck_timer = QtCore.QTimer( self )
 		temp_controller_recheck_timer.timeout.connect( self.temp_controller.Update )
-		temp_controller_recheck_timer.start( 1000 )
+		temp_controller_recheck_timer.start( 100 )
 
 		# Continuously recheck omnic (FTIR) controller
 		omnic_recheck_timer = QtCore.QTimer( self )
