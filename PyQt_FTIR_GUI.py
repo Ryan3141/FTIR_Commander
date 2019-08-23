@@ -11,6 +11,7 @@ from datetime import datetime
 import re
 import numpy as np
 import configparser
+import time
 
 from FTIR_Commander.Omnic_Controller import Omnic_Controller
 from FTIR_Commander.Graph import Graph
@@ -23,7 +24,7 @@ __version__ = '1.00'
 
 base_path = os.path.dirname( os.path.realpath(__file__) )
 
-def resource_path(relative_path):  # Define function to import external files when using PyInstaller.
+def resource_path(relative_path = ""):  # Define function to import external files when using PyInstaller.
     """ Get absolute path to resource, works for dev and for PyInstaller """
     return os.path.join(base_path, relative_path)
 
@@ -42,7 +43,8 @@ def toFloatOrNone( as_string ):
 
 class FtirCommanderWindow(QtWidgets.QWidget, Ui_MainWindow):
 
-	#Set_New_Temperature_K = QtCore.pyqtSignal(float)
+	Set_New_Temperature_K = QtCore.pyqtSignal(float)
+	Turn_Heater_Off = QtCore.pyqtSignal()
 	#Turn_Off_Temperature_Control = QtCore.pyqtSignal(float)
 	def __init__(self, parent=None, root_window=None):
 		QtWidgets.QWidget.__init__(self, parent)
@@ -53,6 +55,8 @@ class FtirCommanderWindow(QtWidgets.QWidget, Ui_MainWindow):
 
 		self.Init_Subsystems()
 		self.Connect_Control_Logic()
+		self.temp_controller_thread.start()
+		self.omnic_controller_thread.start()
 
 		self.temperature_graph.set_title("Measured Temperature Next To Sample")
 		self.temperature_graph.setContentsMargins(0, 0, 0, 0)
@@ -63,23 +67,18 @@ class FtirCommanderWindow(QtWidgets.QWidget, Ui_MainWindow):
 
 
 	def Init_Subsystems( self ):
-		self.sql_type, self.sql_conn = Connect_To_SQL( resource_path( "configuration.ini" ) )
 		#Create_Table_If_Needed( self.sql_conn, self.sql_type )
+		self.active_measurement_thread = None
 
-		config = configparser.ConfigParser()
-		config.read( resource_path( "configuration.ini" ) )
-		self.temp_controller = Temperature_Controller( config, parent=self )
-		self.omnic_controller = Omnic_Controller( config, parent=self )
+		self.temp_controller = Temperature_Controller( resource_path( "configuration.ini" ) )
+		self.temp_controller_thread = QtCore.QThread()
+		self.temp_controller.moveToThread( self.temp_controller_thread )
+		self.temp_controller_thread.started.connect( self.temp_controller.thread_start )
 
-		# Continuously recheck temperature controller
-		temp_controller_recheck_timer = QtCore.QTimer( self )
-		temp_controller_recheck_timer.timeout.connect( self.temp_controller.Update )
-		temp_controller_recheck_timer.start( 100 )
-
-		# Continuously recheck omnic (FTIR) controller
-		omnic_recheck_timer = QtCore.QTimer( self )
-		omnic_recheck_timer.timeout.connect( lambda : self.omnic_controller.Update() )
-		omnic_recheck_timer.start( 500 )
+		self.omnic_controller = Omnic_Controller( resource_path( "configuration.ini" ) )
+		self.omnic_controller_thread = QtCore.QThread()
+		self.omnic_controller.moveToThread( self.omnic_controller_thread )
+		self.omnic_controller_thread.started.connect( self.omnic_controller.thread_start )
 
 		self.Temp_Controller_Disconnected() # Initialize temperature controller to disconnected
 		self.Stop_Set_Temperature() # Initialize all heater settings to be off
@@ -99,6 +98,8 @@ class FtirCommanderWindow(QtWidgets.QWidget, Ui_MainWindow):
 
 		#self.iv_controller_thread.start()
 
+		config = configparser.ConfigParser()
+		config.read( resource_path( "configuration.ini" ) )
 		user = config['Omnic_Communicator']['user']
 		if user:
 			self.user_lineEdit.setText( user )
@@ -120,6 +121,12 @@ class FtirCommanderWindow(QtWidgets.QWidget, Ui_MainWindow):
 		self.omnicConnected_label.setText( "Omnic Not Connected" )
 		self.omnicConnected_label.setStyleSheet("QLabel { background-color: rgba(255,0,0,255); color: rgba(0, 0, 0,255) }")
 
+	def Open_Config_Window( self ):
+		self.config_window.show()
+		getattr(self.config_window, "raise")()
+		self.config_window.activateWindow()
+
+
 	def Connect_Control_Logic( self ):
 		self.Stop_Measurment()
 		#self.run_pushButton.clicked.connect( self.Start_Measurement )
@@ -135,7 +142,7 @@ class FtirCommanderWindow(QtWidgets.QWidget, Ui_MainWindow):
 		self.temp_controller.Setpoint_Changed.connect( lambda setpoint : self.setpoint_lineEdit.setText( '{:.2f} K'.format( setpoint ) ) )
 
 		self.config_window.Connect_Functions( self.temp_controller )
-		self.settings_pushButton.clicked.connect( lambda : self.config_window.show() )
+		self.settings_pushButton.clicked.connect( self.Open_Config_Window )
 
 
 	def Start_Measurement( self ):
@@ -160,99 +167,131 @@ class FtirCommanderWindow(QtWidgets.QWidget, Ui_MainWindow):
 		else:
 			biases_to_measure = [None]
 
-		self.run_pushButton.clicked.disconnect()
+		self.Stop_Set_Temperature()
+#		self.omnic_controller.Request_Settings( resource_path() )
+
+		self.active_measurement =  Measurment_Loop( sample_name, user, temperatures_to_measure, biases_to_measure )
+		self.active_measurement_thread = QtCore.QThread()
+		self.active_measurement.moveToThread( self.active_measurement_thread )
+		self.active_measurement_thread.started.connect( self.omnic_controller.Request_Settings )
+		#self.active_measurement_thread.started.connect( self.active_measurement.Run )
+		self.omnic_controller.Settings_File_Recieved.connect( self.active_measurement.Run )
+		self.active_measurement.Temperature_Change_Requested.connect( self.temperature_graph.Temperature_Setpoint_Changed )
+		self.active_measurement.Temperature_Change_Requested.connect( self.temp_controller.Set_Temp_And_Turn_On )
+		self.Set_New_Temperature_K.connect( self.temp_controller.Set_Temp_And_Turn_On )
+		self.active_measurement.Measurement_Begin.connect( self.omnic_controller.Measure_Sample )
+		self.active_measurement.Finished.connect( self.active_measurement_thread.quit )
+		self.temp_controller.Temperature_Stable.connect( self.active_measurement.Temperature_Ready )
+		self.omnic_controller.File_Recieved.connect( self.active_measurement.Data_Gathered )
+		self.active_measurement_thread.finished.connect( self.Stop_Measurment )
+		self.active_measurement_thread.finished.connect( self.temp_controller.Turn_Off )
+
+
+		try: self.run_pushButton.clicked.disconnect()
+		except Exception: pass
 		self.run_pushButton.setText( "Stop Measurement" )
 		self.run_pushButton.setStyleSheet("QPushButton { background-color: rgba(255,0,0,255); color: rgba(0, 0, 0,255); }")
-		self.run_pushButton.clicked.connect( self.Stop_Measurment )
+		self.run_pushButton.clicked.connect( self.active_measurement.Quit_Early )
 
-		self.omnic_controller.Request_Settings()
-		self.Run_Measurment_Loop( sample_name, user, temperatures_to_measure, biases_to_measure )
+		self.active_measurement_thread.start()
 
 	def Stop_Measurment( self ):
-		if self.temp_controller is not None:
-			self.temp_controller.Turn_Off()
-			self.temperature_graph.setpoint_temperature = None
-
-		self.omnic_controller.Set_Response_Function(
-			lambda file_name, file_contents : None )
+		self.temperature_graph.Temperature_Setpoint_Changed( None )
 
 		try: self.run_pushButton.clicked.disconnect() 
-		except Exception: pass
-		
+		except Exception: pass	
 		self.run_pushButton.setText( "Run Sweep" )
 		self.run_pushButton.setStyleSheet("QPushButton { background-color: rgba(0,255,0,255); color: rgba(0, 0, 0,255); }")
 		self.run_pushButton.clicked.connect( self.Start_Measurement )
-		self.measurement_running = False
 
 	def Start_Set_Temperature( self, temperature ):
-		if temperature is None:
+		if temperature is None or ( self.active_measurement_thread is not None and self.active_measurement_thread.isRunning() ):
 			return
-
-		self.temp_controller.Set_Temperature_In_K( temperature )
-		self.temp_controller.Turn_On()
-		self.temperature_graph.setpoint_temperature = temperature
-
+		self.temperature_graph.Temperature_Setpoint_Changed( temperature )
+		self.Set_New_Temperature_K.emit( temperature )
 		self.setTemperature_pushButton.setText( "Stop Temperature" )
 		self.setTemperature_pushButton.setStyleSheet("QPushButton { background-color: rgba(0,255,0,255); color: rgba(0, 0, 0,255); }")
 		try: self.setTemperature_pushButton.clicked.disconnect() 
 		except Exception: pass
 		self.setTemperature_pushButton.clicked.connect( self.Stop_Set_Temperature )
+		self.setTemperature_pushButton.clicked.connect( self.temp_controller.Turn_Off )
 
 	def Stop_Set_Temperature( self ):
-		if self.temp_controller is not None:
-			self.temp_controller.Turn_Off()
-			self.temperature_graph.setpoint_temperature = None
+		self.temperature_graph.Temperature_Setpoint_Changed( None )
 
 		self.setTemperature_pushButton.setText( "Hold Temperature" )
 		self.setTemperature_pushButton.setStyleSheet("QPushButton { background-color: rgba(255,0,0,255); color: rgba(0, 0, 0,255); }")
 		try: self.setTemperature_pushButton.clicked.disconnect() 
 		except Exception: pass
 		self.setTemperature_pushButton.clicked.connect( lambda : self.Start_Set_Temperature( toFloatOrNone(self.currentTemperature_lineEdit.text()) ) )
+		#self.setTemperature_pushButton.clicked.connect( lambda : self.temp_controller.Set_Temp_And_Turn_On( toFloatOrNone(self.currentTemperature_lineEdit.text()) ) )
 
-	def Wait_For_Stable_Temp( self, temperature ):
-		self.temp_controller.Set_Temperature_In_K( temperature )
-		self.temp_controller.Turn_On()
-		self.temperature_graph.setpoint_temperature = temperature
 
-		while( not self.temp_controller.Temperature_Is_Stable() ):
-			QtCore.QCoreApplication.processEvents()
-			measurement_still_running = ( self.run_pushButton.text() == "Stop Measurement" )
-			if not measurement_still_running:
-				print( "Quitting measurment early" )
-				return False
-		print( "Temperature stable around: " + str(temperature) + '\n' )
-		return True
+	def closeEvent( self, event ):
+		self.run_pushButton.setText( "Closing" )
+		QtWidgets.QWidget.closeEvent(self, event)
 
-	def Run_Measurment_Loop( self, sample_name, user, temperatures_to_measure, biases_to_measure ):
-		for temperature in temperatures_to_measure:
-			for bias in biases_to_measure:
-				self.omnic_controller.Set_Response_Function(
-					lambda file_name, file_contents, user=user, sample_name=sample_name, temperature_in_k=temperature, bias_in_v=bias :
-					Deal_With_FTIR_Data( file_contents, user, self.sql_conn, self.sql_type,
-						 sample_name, temperature_in_k, bias_in_v, self.omnic_controller.settings ) )
-					#Deal_With_FTIR_Data( file_contents, user, self.sql_conn, self.sql_type,
-					#		sample_name, temperature, bias ) )
 
-				if( temperature ): # None is ok, just means we don't know the temperature
-					should_continue_measurement = self.Wait_For_Stable_Temp( temperature )
-					if not should_continue_measurement:
-						return
+class Measurment_Loop( QtCore.QObject ):
+	Finished = QtCore.pyqtSignal()
+	Temperature_Change_Requested = QtCore.pyqtSignal( float )
+	Measurement_Begin = QtCore.pyqtSignal()
+	Finished = QtCore.pyqtSignal()
+
+	def __init__( self, sample_name, user, temperatures_to_measure, biases_to_measure, parent=None ):
+		super().__init__( parent )
+		self.sample_name = sample_name
+		self.user = user
+		self.temperatures_to_measure = temperatures_to_measure
+		self.biases_to_measure = biases_to_measure
+		self.sql_type, self.sql_conn = Connect_To_SQL( resource_path( "configuration.ini" ) )
+
+		self.temperature_ready = False
+		self.data_gathered = False
+		self.quit_early = False
+
+
+	def Run( self ):
+		for temperature in self.temperatures_to_measure:
+			for bias in self.biases_to_measure:
+
+				if temperature is not None: # None is ok, just means we don't care about setting the temperature
+					self.Temperature_Change_Requested.emit( temperature )
+					while( not self.temperature_ready ):
+						if self.quit_early:
+							self.Finished.emit()
+							return
+						time.sleep( 2 )
+						QtCore.QCoreApplication.processEvents()
+					self.temperature_ready = False
 
 				print( "Starting Measurement\n" )
-				self.omnic_controller.Measure_Sample( sample_name )
+				self.temperature_in_k = temperature
+				self.bias_in_v = bias
+				self.Measurement_Begin.emit()
 
-				while( not self.omnic_controller.got_file_over_tcp ):
+				while( not self.data_gathered ):
+					if self.quit_early:
+						self.Finished.emit()
+						return
+					time.sleep( 2 )
 					QtCore.QCoreApplication.processEvents()
-					#measurement_still_running = ( self.run_pushButton.text() == "Stop Measurement" )
-					#if not measurement_still_running:
-					#	print( "Quitting measurment early" )
-					#	return False
+				self.data_gathered = False
 
-				self.omnic_controller.got_file_over_tcp = False
-
-		self.Stop_Measurment()
 		print( "Finished Measurment" )
+		self.Finished.emit()
 
+	def Temperature_Ready( self ):
+		self.temperature_ready = True
+
+	def Quit_Early( self ):
+		print( "Quitting Early" )
+		self.quit_early = True
+
+	def Data_Gathered( self, file_name, ftir_file_contents, ftir_settings ):
+		Deal_With_FTIR_Data( ftir_file_contents, self.user, self.sql_conn, self.sql_type,
+					  self.sample_name, self.temperature_in_k, self.bias_in_v, ftir_settings )
+		self.data_gathered = True
 
 #def Create_Table_If_Needed( sql_conn, sql_type ):
 #	cur = sql_conn.cursor()
@@ -290,6 +329,8 @@ def Deal_With_FTIR_Data( ftir_file_contents, user, sql_conn, sql_type, sample_na
 	##m.update( 'Test'.encode() )
 	#m.update( (sample_name + str( datetime.now() ) + ','.join(intensity) ).encode() )
 	#measurement_id = m.hexdigest()
+	if temperature_in_k is not None:
+		temperature_in_k = str( temperature_in_k )
 
 	meta_data_sql_entries = dict( sample_name=sample_name, user=user, temperature_in_k=temperature_in_k, bias_in_v=bias_in_v,
 				 detector=settings["Detector"], beam_splitter=settings["Beam Splitter"], start_wave_number=settings["Start Wave Number"],
@@ -299,6 +340,7 @@ def Deal_With_FTIR_Data( ftir_file_contents, user, sql_conn, sql_type, sample_na
 	Commit_XY_Data_To_SQL( sql_type, sql_conn, xy_data_sql_table="ftir_raw_data", xy_sql_labels=("wavenumber","intensity"),
 					   x_data=wave_number, y_data=intensity, metadata_sql_table="ftir_measurements", **meta_data_sql_entries )
 
+	print( "Data for temperature {} successfully committed".format( temperature_in_k ) )
 
 if __name__ == "__main__":
 	app = QtWidgets.QApplication(sys.argv)

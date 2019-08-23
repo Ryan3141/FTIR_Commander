@@ -81,7 +81,7 @@ class Graph(QChartView):
 		#self.debug_series.setPointLabelsFormat("Current Temp: @yPoint K");
 		self.chart.addSeries( self.debug_series )
 
-		self.number_of_samples_to_keep = 2 * 5 * 60
+		self.number_of_samples_to_keep = 5 * 60
 
 		self.xMin = QDateTime.currentDateTime().toMSecsSinceEpoch()
 		self.xMax = QDateTime.currentDateTime().toMSecsSinceEpoch()
@@ -186,12 +186,20 @@ class Graph(QChartView):
 		#self.arrow.end.setCoords(4, 1.6); # point to (4, 1.6) in x-y-plot coordinates
 		#self.arrow.setHead(QCPLineEnding.esSpikeArrow);
 
+	def Temperature_Setpoint_Changed( self, temperature_in_k ):
+		self.setpoint_temperature = temperature_in_k
+
 	def set_title(self, title):
 		self.chart.setTitle(title)
 
 	def add_new_pid_output_data_point( self, x, y ):
 		x_as_millisecs = x.toMSecsSinceEpoch()
 		self.pidOutputSeries.append( x_as_millisecs, y )
+		num_of_datapoints = self.pidOutputSeries.count()
+		if( num_of_datapoints > self.number_of_samples_to_keep ):
+			too_many = num_of_datapoints - self.number_of_samples_to_keep
+			for i in range(0, self.number_of_samples_to_keep // 2, 2)[::-1]:
+				self.pidOutputSeries.remove( i )
 		self.repaint()
 
 	def add_new_data_point( self, x, y ):
@@ -207,8 +215,13 @@ class Graph(QChartView):
 			self.set_temp_label_series.clear()
 
 		num_of_datapoints = self.temperatureSeries.count()
-		#if( num_of_datapoints > self.number_of_samples_to_keep ):
-		#	self.number_of_samples_to_keep.
+		if( num_of_datapoints > self.number_of_samples_to_keep ):
+			too_many = num_of_datapoints - self.number_of_samples_to_keep
+			self.temperatureSeries.removePoints( 0, too_many )
+		num_of_datapoints = self.setpointTemperatureSeries.count()
+		if( num_of_datapoints > self.number_of_samples_to_keep ):
+			too_many = num_of_datapoints - self.number_of_samples_to_keep
+			self.setpointTemperatureSeries.removePoints( 0, too_many )
 		#print( x_as_millisecs, y )
 		#self.chart.scroll( x_as_millisecs - 5 * 60 * 1000, x_as_millisecs )
 		#self.temperatureSeries.append( x, float(y) )

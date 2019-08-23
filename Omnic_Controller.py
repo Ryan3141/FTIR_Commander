@@ -1,6 +1,7 @@
 import time
 import shutil
 import os
+import configparser
 from PyQt5 import QtCore
 
 from MPL_Shared.Device_Communicator import Device_Communicator
@@ -10,17 +11,23 @@ class Omnic_Controller( QtCore.QObject ):
 	"""Interface with Omnic Windows NT Computer"""
 	Device_Connected = QtCore.pyqtSignal(str,str)
 	Device_Disconnected = QtCore.pyqtSignal(str,str)
+	File_Recieved = QtCore.pyqtSignal( str, bytes, dict ) # file_name, file_contents, ftir_settings
+	Settings_File_Recieved = QtCore.pyqtSignal( dict )
 
-	def __init__( self, configuration_file, parent ):
+	def __init__( self, configuration_file, parent=None ):
 		super().__init__( parent )
 		self.got_file_over_tcp = False
 		self.settings = {}
+		self.configuration_file = configuration_file
 
-		self.response_function = lambda file_name, file_contents : None
-		self.ip_range = configuration_file['Omnic_Communicator']['ip_range']
+	def thread_start( self ):
+		config = configparser.ConfigParser()
+		config.read( self.configuration_file )
+
+		self.ip_range = config['Omnic_Communicator']['ip_range']
 		try:
-			self.device_communicator = Device_Communicator( parent, identifier_string=configuration_file['Omnic_Communicator']['Listener_Type'], listener_address=None,
-												  port=configuration_file['Omnic_Communicator']['Listener_Port'], timeout_ms=120000 )
+			self.device_communicator = Device_Communicator( self, identifier_string=config['Omnic_Communicator']['Listener_Type'], listener_address=None,
+												  port=config['Omnic_Communicator']['Listener_Port'], timeout_ms=120000 )
 			self.device_communicator.Reply_Recieved.connect( lambda message, device : self.ParseMessage( message ) )
 			self.device_communicator.File_Recieved.connect( lambda file_name, file_contents, device : self.ParseFile( file_name, file_contents ) )
 			self.device_communicator.Device_Connected.connect( lambda peer_identifier : self.Device_Connected.emit( peer_identifier, "Wifi" ) )
@@ -28,6 +35,11 @@ class Omnic_Controller( QtCore.QObject ):
 		except:
 			self.device_communicator = None
 			raise Exception( "Issue setting up network listener, please make sure computer is connected to a router" )
+
+		# Continuously recheck omnic (FTIR) controller
+		self.omnic_recheck_timer = QtCore.QTimer( self )
+		self.omnic_recheck_timer.timeout.connect( self.Update )
+		self.omnic_recheck_timer.start( 500 )
 
 
 	def ParseMessage( self, message ):
@@ -42,30 +54,26 @@ class Omnic_Controller( QtCore.QObject ):
 	def ParseFile( self, file_name, file_contents ):
 		if file_name.lower() == "settingsfile.exp" or file_name.lower() == "default.exp":
 			self.settings = Load_FTIR_Config( file_contents )
+			self.Settings_File_Recieved.emit( self.settings )
 			print( "Got FTIR Configuration File" )
 			return
-		self.response_function( file_name, file_contents )
+		self.File_Recieved.emit( file_name, file_contents, self.settings )
 		self.got_file_over_tcp = True
-		pass
 
 	def Update( self ):
 		if( self.device_communicator.No_Devices_Connected() ):
 			self.device_communicator.Poll_LocalIPs_For_Devices( self.ip_range )
 
-	def SendFile( self, file_path ):
-		file = open( file_path, 'r' )
+	def SendFile( self, folder, file_path ):
+		file = open( os.path.join(folder, file_path), 'r' )
 		file_contents = file.read()
 		file.close()
 
 		self.device_communicator.Send_Command( "FILE " + str(len(file_contents)) + "\n" + file_contents )
 
-	def Measure_Sample( self, measurement_name ):
-		print( "Starting measurement: " + measurement_name )
-		self.SendFile( "GetBackground.command" )
+	def Measure_Sample( self, folder="." ):
+		self.SendFile( folder, "GetBackground.command" )
 
-	def Set_Response_Function( self, response_function ):
-		self.response_function = response_function
-
-	def Request_Settings( self ):
-		print( "Getting Settings" )
-		self.SendFile( "SaveSettingsFile.command" ) # Make sure the settings file is saved as settings_file.exp (case insensitive) to get it the right place
+	def Request_Settings( self, folder="." ):
+		print( "Request settings" )
+		self.SendFile( folder, "SaveSettingsFile.command" ) # Make sure the settings file is saved as settings_file.exp (case insensitive) to get it the right place
