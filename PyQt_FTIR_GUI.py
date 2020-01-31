@@ -140,6 +140,8 @@ class FtirCommanderWindow(QtWidgets.QWidget, Ui_MainWindow):
 		self.temp_controller.PID_Output_Changed.connect( lambda pid_output : self.temperature_graph.add_new_pid_output_data_point( QtCore.QDateTime.currentDateTime(), pid_output ) )
 		self.temp_controller.PID_Output_Changed.connect( lambda pid_output : self.outputPower_lineEdit.setText( '{:.2f} %'.format( pid_output ) ) )
 		self.temp_controller.Setpoint_Changed.connect( lambda setpoint : self.setpoint_lineEdit.setText( '{:.2f} K'.format( setpoint ) ) )
+		self.Set_New_Temperature_K.connect( self.temp_controller.Set_Temp_And_Turn_On )
+		self.Turn_Heater_Off.connect( self.temp_controller.Turn_Off )
 
 		self.config_window.Connect_Functions( self.temp_controller )
 		self.settings_pushButton.clicked.connect( self.Open_Config_Window )
@@ -178,7 +180,6 @@ class FtirCommanderWindow(QtWidgets.QWidget, Ui_MainWindow):
 		self.omnic_controller.Settings_File_Recieved.connect( self.active_measurement.Run )
 		self.active_measurement.Temperature_Change_Requested.connect( self.temperature_graph.Temperature_Setpoint_Changed )
 		self.active_measurement.Temperature_Change_Requested.connect( self.temp_controller.Set_Temp_And_Turn_On )
-		self.Set_New_Temperature_K.connect( self.temp_controller.Set_Temp_And_Turn_On )
 		self.active_measurement.Measurement_Begin.connect( self.omnic_controller.Measure_Sample )
 		self.active_measurement.Finished.connect( self.active_measurement_thread.quit )
 		self.temp_controller.Temperature_Stable.connect( self.active_measurement.Temperature_Ready )
@@ -197,6 +198,7 @@ class FtirCommanderWindow(QtWidgets.QWidget, Ui_MainWindow):
 
 	def Stop_Measurment( self ):
 		self.temperature_graph.Temperature_Setpoint_Changed( None )
+		self.Turn_Heater_Off.emit()
 
 		try: self.run_pushButton.clicked.disconnect() 
 		except Exception: pass	
@@ -208,7 +210,7 @@ class FtirCommanderWindow(QtWidgets.QWidget, Ui_MainWindow):
 		if temperature is None or ( self.active_measurement_thread is not None and self.active_measurement_thread.isRunning() ):
 			return
 		self.temperature_graph.Temperature_Setpoint_Changed( temperature )
-		self.Set_New_Temperature_K.emit( temperature )
+		self.Set_New_Temperature_K.emit( float(temperature) )
 		self.setTemperature_pushButton.setText( "Stop Temperature" )
 		self.setTemperature_pushButton.setStyleSheet("QPushButton { background-color: rgba(0,255,0,255); color: rgba(0, 0, 0,255); }")
 		try: self.setTemperature_pushButton.clicked.disconnect() 
@@ -218,6 +220,7 @@ class FtirCommanderWindow(QtWidgets.QWidget, Ui_MainWindow):
 
 	def Stop_Set_Temperature( self ):
 		self.temperature_graph.Temperature_Setpoint_Changed( None )
+		self.Turn_Heater_Off.emit()
 
 		self.setTemperature_pushButton.setText( "Hold Temperature" )
 		self.setTemperature_pushButton.setStyleSheet("QPushButton { background-color: rgba(255,0,0,255); color: rgba(0, 0, 0,255); }")

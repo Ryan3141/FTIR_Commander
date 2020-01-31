@@ -81,7 +81,7 @@ class Graph(QChartView):
 		#self.debug_series.setPointLabelsFormat("Current Temp: @yPoint K");
 		self.chart.addSeries( self.debug_series )
 
-		self.number_of_samples_to_keep = 5 * 60
+		self.number_of_samples_to_keep = 2 * 10 * 60
 
 		self.xMin = QDateTime.currentDateTime().toMSecsSinceEpoch()
 		self.xMax = QDateTime.currentDateTime().toMSecsSinceEpoch()
