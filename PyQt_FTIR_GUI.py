@@ -2,7 +2,11 @@ if __name__ == "__main__": # This allows running this module by running this scr
 	import sys
 	sys.path.insert(0, "..")
 
-from PyQt5 import QtNetwork, QtCore, QtGui, uic, QtWidgets
+from PyQt5 import QtNetwork, QtCore, QtGui, QtWidgets
+try:
+	from PyQt5 import uic
+except ImportError:
+	import sip
 import os
 import sys
 
