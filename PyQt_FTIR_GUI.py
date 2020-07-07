@@ -187,6 +187,7 @@ class FtirCommanderWindow(QtWidgets.QWidget, Ui_MainWindow):
 		self.active_measurement.Measurement_Begin.connect( self.omnic_controller.Measure_Sample )
 		self.active_measurement.Finished.connect( self.active_measurement_thread.quit )
 		self.temp_controller.Temperature_Stable.connect( self.active_measurement.Temperature_Ready )
+		self.temp_controller.Case_Temperature_Changed.connect( self.active_measurement.Case_Temperature_Changed )
 		self.omnic_controller.File_Recieved.connect( self.active_measurement.Data_Gathered )
 		self.active_measurement_thread.finished.connect( self.Stop_Measurment )
 		self.active_measurement_thread.finished.connect( self.temp_controller.Turn_Off )
@@ -250,6 +251,7 @@ class Measurment_Loop( QtCore.QObject ):
 		self.sample_name = sample_name
 		self.user = user
 		self.temperatures_to_measure = temperatures_to_measure
+		self.case_temperature = None
 		self.biases_to_measure = biases_to_measure
 		self.sql_type, self.sql_conn = Connect_To_SQL( resource_path( "configuration.ini" ) )
 
@@ -288,6 +290,9 @@ class Measurment_Loop( QtCore.QObject ):
 		print( "Finished Measurment" )
 		self.Finished.emit()
 
+	def Case_Temperature_Changed( self, temp_in_c ):
+		self.case_temperature = temp_in_c
+
 	def Temperature_Ready( self ):
 		self.temperature_ready = True
 
@@ -297,7 +302,7 @@ class Measurment_Loop( QtCore.QObject ):
 
 	def Data_Gathered( self, file_name, ftir_file_contents, ftir_settings ):
 		Deal_With_FTIR_Data( ftir_file_contents, self.user, self.sql_conn, self.sql_type,
-					  self.sample_name, self.temperature_in_k, self.bias_in_v, ftir_settings )
+					  self.sample_name, self.temperature_in_k, self.case_temperature, self.bias_in_v, ftir_settings )
 		self.data_gathered = True
 
 #def Create_Table_If_Needed( sql_conn, sql_type ):
@@ -321,7 +326,7 @@ class Measurment_Loop( QtCore.QObject ):
 #	cur.close()
 #	return False
 
-def Deal_With_FTIR_Data( ftir_file_contents, user, sql_conn, sql_type, sample_name, temperature_in_k, bias_in_v, settings ):
+def Deal_With_FTIR_Data( ftir_file_contents, user, sql_conn, sql_type, sample_name, temperature_in_k, case_temperature_in_c, bias_in_v, settings ):
 	wave_number = []
 	intensity = []
 	for line in re.split( '\n|\r', ftir_file_contents.decode('utf8', 'ignore') ):
@@ -342,7 +347,7 @@ def Deal_With_FTIR_Data( ftir_file_contents, user, sql_conn, sql_type, sample_na
 	meta_data_sql_entries = dict( sample_name=sample_name, user=user, temperature_in_k=temperature_in_k, bias_in_v=bias_in_v,
 				 detector=settings["Detector"], beam_splitter=settings["Beam Splitter"], start_wave_number=settings["Start Wave Number"],
 				 end_wave_number=settings["End Wave Number"], number_of_scans=settings["Number of Scans"], velocity=settings["Velocity"],
-				 aperture=settings["Aperture"], gain=settings["Gain"] )
+				 aperture=settings["Aperture"], gain=settings["Gain"], dewar_temp_in_c=case_temperature_in_c )
 
 	Commit_XY_Data_To_SQL( sql_type, sql_conn, xy_data_sql_table="ftir_raw_data", xy_sql_labels=("wavenumber","intensity"),
 					   x_data=wave_number, y_data=intensity, metadata_sql_table="ftir_measurements", **meta_data_sql_entries )
