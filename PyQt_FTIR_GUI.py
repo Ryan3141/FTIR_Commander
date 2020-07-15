@@ -140,10 +140,10 @@ class FtirCommanderWindow(QtWidgets.QWidget, Ui_MainWindow):
 		#random_noise_timer.start( 500 )
 
 		self.temp_controller.Temperature_Changed.connect( lambda temperature : self.temperature_graph.add_new_data_point( QtCore.QDateTime.currentDateTime(), temperature ) )
-		self.temp_controller.Temperature_Changed.connect( lambda temperature : self.currentTemperature_lineEdit_2.setText( '{:.2f} K'.format( temperature ) ) )
+		self.temp_controller.Temperature_Changed.connect( lambda temperature : self.currentTemperature_lineEdit_2.setText( f'{temperature:.2f} K' ) )
 		self.temp_controller.PID_Output_Changed.connect( lambda pid_output : self.temperature_graph.add_new_pid_output_data_point( QtCore.QDateTime.currentDateTime(), pid_output ) )
-		self.temp_controller.PID_Output_Changed.connect( lambda pid_output : self.outputPower_lineEdit.setText( '{:.2f} %'.format( pid_output ) ) )
-		self.temp_controller.Setpoint_Changed.connect( lambda setpoint : self.setpoint_lineEdit.setText( '{:.2f} K'.format( setpoint ) ) )
+		self.temp_controller.PID_Output_Changed.connect( lambda pid_output : self.outputPower_lineEdit.setText( f'{pid_output:.2f} %' ) )
+		self.temp_controller.Setpoint_Changed.connect( lambda setpoint : self.setpoint_lineEdit.setText( f'{setpoint:.2f} K' ) )
 		self.Set_New_Temperature_K.connect( self.temp_controller.Set_Temp_And_Turn_On )
 		self.Turn_Heater_Off.connect( self.temp_controller.Turn_Off )
 
@@ -191,6 +191,7 @@ class FtirCommanderWindow(QtWidgets.QWidget, Ui_MainWindow):
 		self.omnic_controller.File_Recieved.connect( self.active_measurement.Data_Gathered )
 		self.active_measurement_thread.finished.connect( self.Stop_Measurment )
 		self.active_measurement_thread.finished.connect( self.temp_controller.Turn_Off )
+		self.temp_controller.Case_Temperature_Changed.connect( lambda t : self.caseTemperature_lineEdit.setText(f"{t:0.2f}") )
 
 
 		try: self.run_pushButton.clicked.disconnect()
