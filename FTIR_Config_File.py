@@ -3,15 +3,14 @@ from struct import *
 
 def Load_FTIR_Config( file_contents ):
 	Beam_Splitters = ["", "KBr Mid IR", "CaF2", "Quartz", "Solid Substrate Far IR"]
-	size_of_types = {'f':4,'B':1,'b':1}
+	size_of_types = {'f':4,'B':1,'b':1,'H':2}
 	wanted_data = [
 		("Beam Splitter Index", 0xEBF, 'b'),
 		("Start Wave Number", 0xF1E, 'f'),
 		("End Wave Number", 0xF22, 'f'),
-		("Number of Scans", 0x63A, 'B'),
+		("Number of Scans", 0x63A, 'H'),
 		("Velocity", 0xEC5, 'f'),
 		("Aperture", 0xEC1, 'f'),
-		#("Aperture", 0xEC1, 'f'),
 		("Gain", 0xED7, 'f')]
 
 	sorted_wanted_data = sorted( wanted_data, key=lambda x:x[1] )
