@@ -257,10 +257,6 @@ class FtirCommanderWindow(QtWidgets.QWidget, Ui_MainWindow, Saveable_Session):
 		except Exception: pass
 		self.setTemperature_pushButton.clicked.connect( lambda : self.Start_Set_Temperature( toFloatOrNone(self.currentTemperature_lineEdit.text()) ) )
 
-	def closeEvent( self, event ):
-		self.run_pushButton.setText( "Closing" )
-		QtWidgets.QWidget.closeEvent(self, event)
-
 
 def Deal_With_FTIR_Data( ftir_file_contents ):
 	wave_number = []
