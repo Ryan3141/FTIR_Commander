@@ -27,12 +27,12 @@ class Omnic_Controller( QtCore.QObject ):
 		self.ip_range = config['Omnic_Communicator']['ip_range']
 		try:
 			self.device_communicator = Device_Communicator( self, identifier_string=config['Omnic_Communicator']['Listener_Type'], listener_address=None,
-												  port=config['Omnic_Communicator']['Listener_Port'], timeout_ms=120000 )
+												  port=config['Omnic_Communicator']['Listener_Port'], timeout_ms=12000000 )
 			self.device_communicator.Reply_Recieved.connect( lambda message, device : self.ParseMessage( message ) )
 			self.device_communicator.File_Recieved.connect( lambda file_name, file_contents, device : self.ParseFile( file_name, file_contents ) )
 			self.device_communicator.Device_Connected.connect( lambda peer_identifier : self.Device_Connected.emit( peer_identifier, "Wifi" ) )
 			self.device_communicator.Device_Disconnected.connect( lambda peer_identifier : self.Device_Disconnected.emit( peer_identifier, "Wifi" ) )
-		except:
+		except Exception:
 			self.device_communicator = None
 			raise Exception( "Issue setting up network listener, please make sure computer is connected to a router" )
 
@@ -41,6 +41,9 @@ class Omnic_Controller( QtCore.QObject ):
 		self.omnic_recheck_timer.timeout.connect( self.Update )
 		self.omnic_recheck_timer.start( 500 )
 
+	def thread_stop( self ):
+		self.omnic_recheck_timer.stop()
+		self.device_communicator.Stop()
 
 	def ParseMessage( self, message ):
 		if message == 'Ping':

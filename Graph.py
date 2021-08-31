@@ -4,14 +4,14 @@
 # Copyright (c) 2015 Pierre Raybaut
 
 """
-Simple example illustrating Qt Charts capabilities to plot curves with 
+Simple example illustrating Qt Charts capabilities to plot curves with
 a high number of points, using OpenGL accelerated series
 """
 
 from MPL_Shared.Install_If_Necessary import Ask_For_Install
 try:
 	from PyQt5.QtChart import QChart, QChartView, QLineSeries, QDateTimeAxis, QValueAxis
-except:
+except ImportError:
 	Ask_For_Install( "PyQtChart" )
 	from PyQt5.QtChart import QChart, QChartView, QLineSeries, QDateTimeAxis, QValueAxis
 
@@ -241,7 +241,7 @@ class Graph(QChartView):
 			margin = full_range * 0.05
 
 			self.chart.axisX().setRange( QDateTime.fromMSecsSinceEpoch(self.xMax - full_range - margin), QDateTime.fromMSecsSinceEpoch(self.xMax + margin) )
-			
+
 	def Rescale_Axes( self, index ):
 		x = self.temperatureSeries.at( index ).x()
 		x_rescaled = False
@@ -256,7 +256,7 @@ class Graph(QChartView):
 			margin = full_range * 0.05
 
 			self.chart.axisX().setRange( QDateTime.fromMSecsSinceEpoch(self.xMax - full_range - margin), QDateTime.fromMSecsSinceEpoch(self.xMax + margin) )
-			
+
 		y = self.temperatureSeries.at( index ).y()
 		y_rescaled = False
 		if( y < self.yMin ):
@@ -269,4 +269,4 @@ class Graph(QChartView):
 			full_range = self.yMax - self.yMin
 			margin = full_range * 0.05
 			self.chart.axisY().setRange( self.yMin - margin, self.yMax + margin )
-			
+
