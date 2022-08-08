@@ -1,3 +1,6 @@
+# Click on Ok button
+MouseLClick 377 714
+Enter
 WaitFor OMNIC
 CtrlText n
 Text WindowName
@@ -19,3 +22,5 @@ Text MeasurementName.csv
 Tab 2
 Enter
 CtrlF4
+WaitFor OMNIC
+CtrlText e

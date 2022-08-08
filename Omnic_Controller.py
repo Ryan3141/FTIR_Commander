@@ -6,6 +6,7 @@ from PyQt5 import QtCore
 
 from MPL_Shared.Device_Communicator import Device_Communicator
 from .FTIR_Config_File import Load_FTIR_Config
+from MPL_Shared.GUI_Tools import resource_path
 
 class Omnic_Controller( QtCore.QObject ):
 	"""Interface with Omnic Windows NT Computer"""
@@ -45,6 +46,9 @@ class Omnic_Controller( QtCore.QObject ):
 		self.omnic_recheck_timer.stop()
 		self.device_communicator.Stop()
 
+	def Make_Safe( self ):
+		pass
+
 	def ParseMessage( self, message ):
 		if message == 'Ping':
 			return
@@ -74,9 +78,9 @@ class Omnic_Controller( QtCore.QObject ):
 
 		self.device_communicator.Send_Command( "FILE " + str(len(file_contents)) + "\n" + file_contents )
 
-	def Measure_Sample( self, folder="." ):
+	def Measure_Sample( self, folder=resource_path(".") ):
 		self.SendFile( folder, "GetBackground.command" )
 
-	def Request_Settings( self, folder="." ):
+	def Request_Settings( self, folder=resource_path(".") ):
 		print( "Request settings" )
 		self.SendFile( folder, "SaveSettingsFile.command" ) # Make sure the settings file is saved as settings_file.exp (case insensitive) to get it the right place

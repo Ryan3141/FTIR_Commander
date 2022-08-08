@@ -13,3 +13,5 @@ MouseLClick 725 546
 # Click on Ok button
 MouseLClick 458 715
 Enter
+WaitFor OMNIC
+CtrlText e
